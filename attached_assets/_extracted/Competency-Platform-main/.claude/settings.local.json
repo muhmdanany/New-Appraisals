@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm -v)",
+      "Bash(git -C \"D:/Competency Platform\" status)"
+    ]
+  }
+}

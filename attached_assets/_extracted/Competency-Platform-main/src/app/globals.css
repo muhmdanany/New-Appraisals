@@ -1,0 +1,83 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Corporate navy theme (ported from the prototype). HSL channels. */
+    --background: 220 23% 95%;
+    --foreground: 222 15% 12%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222 15% 12%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 15% 12%;
+
+    --primary: 212 67% 32%;
+    --primary-foreground: 0 0% 100%;
+    --primary-dark: 215 78% 23%;
+
+    --secondary: 220 23% 95%;
+    --secondary-foreground: 222 15% 12%;
+
+    --accent: 44 54% 54%;
+    --accent-foreground: 215 78% 18%;
+
+    --success: 162 65% 29%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 26 90% 37%;
+    --warning-foreground: 0 0% 100%;
+
+    --destructive: 6 64% 46%;
+    --destructive-foreground: 0 0% 100%;
+
+    --muted: 220 20% 94%;
+    --muted-foreground: 226 15% 45%;
+
+    --border: 220 16% 89%;
+    --input: 220 16% 85%;
+    --ring: 212 67% 32%;
+
+    /* Sidebar (dark navy) */
+    --sidebar: 219 62% 15%;
+    --sidebar-foreground: 0 0% 100%;
+    --sidebar-accent: 44 54% 56%;
+    --sidebar-muted: 215 25% 70%;
+
+    --radius: 0.625rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+  /* Slim scrollbars, matching the prototype feel. */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply rounded-full bg-border;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-muted-foreground;
+  }
+}
+
+@media print {
+  /* Print backgrounds/colors accurately (score bars, badges, headers). */
+  * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  body {
+    background: #fff;
+  }
+}
