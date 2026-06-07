@@ -1,1 +1,1 @@
-- [Competency Platform port](competency-platform-port.md) — Go(chi/pgx)+React port: no migration runner (apply SQL by hand), web dev-workflow port blocker (use typecheck+prod build), canonical Role enum & RBAC mirror, OpenAPI is contract source of truth.
+- [Competency Platform port](competency-platform-port.md) — Go(chi/pgx)+React HR app: no migration runner, RBAC gating must mirror backend, enum fields are dropdowns, OpenAPI is contract source of truth.

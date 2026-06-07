@@ -46,6 +46,23 @@ JSON shapes (regenerate client via `pnpm --filter @workspace/api-spec run
 codegen` only when the spec itself changes). Backend struct json tags drifting
 from the spec is a recurring bug class here (e.g. report rows, PolicySet.labels).
 
-## Admin login (dev seed)
-`admin@hr.local` / `Password123!`. AI endpoints return 412 (Arabic message)
-until `OPENROUTER_API_KEY` is set.
+## Dev seed & AI key
+Seed users (incl. an admin) are created by `cmd/seed/main.go` — read it for the
+current dev login emails/passwords; do not hardcode credentials elsewhere. AI
+endpoints return 412 (Arabic message) until `OPENROUTER_API_KEY` is set.
+
+## RBAC: frontend manage gating MUST mirror backend route guards
+Mutation routes in `internal/router/router.go` use `rbac` groups: AdminOnly =
+[ADMIN] (competencies, grades, jobs, employees, kpis, career-paths
+create/update/delete); Evaluators = [ADMIN, FIRST_LEVEL_MANAGER]
+(evaluation create/edit/submit); Approvers = [ADMIN, SECOND_LEVEL_MANAGER]
+(approve/reject); acknowledge/object = any authed.
+**Why:** `useCanManage()` defaulting wider than the backend makes privileged
+non-admins (e.g. HR_MANAGER) see create/edit buttons that 403.
+**How to apply:** gate each page's manage UI with the exact role set of its
+mutation endpoint; default `useCanManage` is [ADMIN].
+
+## Enum fields must be dropdowns, not free-text
+Backend `validateEnum` rejects invalid enum values with 400. contractType (jobs)
+and competency level/type are Postgres enums — render them as `SelectField`s with
+valid options + a sane default, never free-text inputs.
