@@ -15,22 +15,15 @@ applied by hand from `artifacts/api-server/internal/db/migrations/0001_init.sql`
 explicit `ALTER TABLE ... ADD COLUMN IF NOT EXISTS ...` against the live DB. The
 deployed/production DB needs the same manual application step.
 
-## web dev workflow DIDNT_OPEN_A_PORT was a toml/port MISMATCH (fixable)
-Symptom: `artifacts/web: web` shows vite "ready" on a port but the workflow is
-marked FAILED (DIDNT_OPEN_A_PORT). Root cause here: the artifact.toml had been
-hand-edited to `localPort = 5000`, but the system auto-assigned the service to a
-DIFFERENT port (22333, where vite actually listened) — so the supervisor/proxy
-watched 5000 and never saw an open port.
-**Why:** artifact port assignment is automatic and cannot be hand-specified;
-editing `artifact.toml` in place (instead of via `verifyAndReplaceArtifactToml`)
-drifts the toml's localPort away from the real assigned port and away from the
-workflow.
-**How to apply:** check the actual port in the vite log vs `[[services]]
-localPort` in `.replit-artifact/artifact.toml`. Align them by writing a temp
-`artifact.edit.toml` (full content) with `localPort` AND `[services.env] PORT`
-set to the real assigned port (cross-check `.replit` `[[ports]]`), then run the
-`verifyAndReplaceArtifactToml` callback (NOT a direct edit) and restart the
-workflow. Never hand-edit artifact.toml in place.
+## Never hand-edit artifact.toml (port-mismatch workflow failures)
+Artifact service ports are auto-assigned and cannot be hand-specified. Editing
+`.replit-artifact/artifact.toml` in place drifts its `localPort` away from the
+real assigned port, so the proxy watches the wrong port and the workflow fails
+(e.g. DIDNT_OPEN_A_PORT even though vite reports "ready").
+**Why:** the assigned port lives outside the toml; in-place edits desync them.
+**How to apply:** always change artifact config via the `verifyAndReplaceArtifactToml`
+callback (full-content temp `artifact.edit.toml`), never a direct file edit, then
+restart the workflow.
 
 ## Canonical Role enum (backend source of truth)
 `ADMIN, HR_MANAGER, FIRST_LEVEL_MANAGER, SECOND_LEVEL_MANAGER, EMPLOYEE`
