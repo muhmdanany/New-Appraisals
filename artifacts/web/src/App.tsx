@@ -1,39 +1,61 @@
+import { lazy, Suspense } from "react";
 import { Switch, Route, Router as WouterRouter } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/lib/auth-context";
-import { Layout } from "@/components/layout";
 import NotFound from "@/pages/not-found";
-
 import Login from "@/pages/login";
-import Dashboard from "@/pages/dashboard";
-import Jobs from "@/pages/jobs";
-import JobProfile from "@/pages/jobs/profile";
-import Competencies from "@/pages/competencies";
-import Employees from "@/pages/employees";
-import Grades from "@/pages/grades";
-import CareerPaths from "@/pages/career-paths";
-import Kpis from "@/pages/kpis";
-import JobKpis from "@/pages/kpis/view";
-import Evaluations from "@/pages/evaluations";
-import EvaluationDetail from "@/pages/evaluations/detail";
-import Reports from "@/pages/reports";
-import BellCurve from "@/pages/bell-curve";
-import OrgChart from "@/pages/org-chart";
 
-const queryClient = new QueryClient();
+const Layout = lazy(() =>
+  import("@/components/layout").then((m) => ({ default: m.Layout })),
+);
+
+const Dashboard = lazy(() => import("@/pages/dashboard"));
+const Jobs = lazy(() => import("@/pages/jobs"));
+const JobProfile = lazy(() => import("@/pages/jobs/profile"));
+const Competencies = lazy(() => import("@/pages/competencies"));
+const Employees = lazy(() => import("@/pages/employees"));
+const Grades = lazy(() => import("@/pages/grades"));
+const CareerPaths = lazy(() => import("@/pages/career-paths"));
+const Kpis = lazy(() => import("@/pages/kpis"));
+const JobKpis = lazy(() => import("@/pages/kpis/view"));
+const Evaluations = lazy(() => import("@/pages/evaluations"));
+const EvaluationDetail = lazy(() => import("@/pages/evaluations/detail"));
+const Reports = lazy(() => import("@/pages/reports"));
+const BellCurve = lazy(() => import("@/pages/bell-curve"));
+const OrgChart = lazy(() => import("@/pages/org-chart"));
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      refetchOnWindowFocus: false,
+      staleTime: 30_000,
+      retry: 1,
+    },
+  },
+});
+
+function PageLoader() {
+  return (
+    <div className="min-h-screen flex items-center justify-center text-muted-foreground">
+      جاري التحميل...
+    </div>
+  );
+}
 
 function ProtectedRoute({ component: Component, ...rest }: any) {
   const { user, isLoading } = useAuth();
-  
-  if (isLoading) return <div className="min-h-screen flex items-center justify-center">جاري التحميل...</div>;
+
+  if (isLoading) return <PageLoader />;
   if (!user) return <Login />;
-  
+
   return (
-    <Layout>
-      <Component {...rest} />
-    </Layout>
+    <Suspense fallback={<PageLoader />}>
+      <Layout>
+        <Component {...rest} />
+      </Layout>
+    </Suspense>
   );
 }
 
