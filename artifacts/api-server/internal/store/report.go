@@ -19,16 +19,18 @@ var EvaluationStatusLabels = map[string]string{
 
 // ReportEvaluationRow is a flat evaluation row for CSV export.
 type ReportEvaluationRow struct {
+        ID              string   `json:"id"`
         EmployeeName    string   `json:"employeeName"`
         EmployeeNumber  string   `json:"employeeNumber"`
-        Job             string   `json:"job"`
+        DepartmentName  string   `json:"departmentName"`
+        JobName         string   `json:"jobName"`
         Period          string   `json:"period"`
         KpiScore        *float64 `json:"kpiScore"`
         CompetencyScore *float64 `json:"competencyScore"`
         TotalScore      *int     `json:"totalScore"`
-        Rating          string   `json:"rating"`
+        RatingLabel     string   `json:"ratingLabel"`
         Status          string   `json:"status"`
-        Evaluator       string   `json:"evaluator"`
+        EvaluatorName   string   `json:"evaluatorName"`
         Approver        string   `json:"approver"`
         Date            string   `json:"date"`
 }
@@ -36,11 +38,12 @@ type ReportEvaluationRow struct {
 // ReportEvaluations returns flattened evaluation rows ordered by recency.
 func (s *Store) ReportEvaluations(ctx context.Context) ([]ReportEvaluationRow, error) {
         rows, err := s.pool.Query(ctx, `
-                SELECT emp.name, emp."employeeNumber", COALESCE(j.name,''), e.period,
+                SELECT e.id, emp.name, emp."employeeNumber", COALESCE(d.name,''), COALESCE(j.name,''), e.period,
                         e."kpiScore", e."competencyScore", e."totalScore", COALESCE(e."ratingLabel",''),
                         e.status, ev.name, COALESCE(ap.name,''), e."createdAt"
                 FROM "Evaluation" e
                 JOIN "Employee" emp ON emp.id = e."employeeId"
+                LEFT JOIN "Department" d ON d.id = emp."departmentId"
                 LEFT JOIN "Job" j ON j.id = e."jobId"
                 JOIN "User" ev ON ev.id = e."evaluatorId"
                 LEFT JOIN "User" ap ON ap.id = e."approverId"
@@ -54,9 +57,9 @@ func (s *Store) ReportEvaluations(ctx context.Context) ([]ReportEvaluationRow, e
                 var row ReportEvaluationRow
                 var status string
                 var createdAt time.Time
-                if err := rows.Scan(&row.EmployeeName, &row.EmployeeNumber, &row.Job, &row.Period,
-                        &row.KpiScore, &row.CompetencyScore, &row.TotalScore, &row.Rating,
-                        &status, &row.Evaluator, &row.Approver, &createdAt); err != nil {
+                if err := rows.Scan(&row.ID, &row.EmployeeName, &row.EmployeeNumber, &row.DepartmentName, &row.JobName, &row.Period,
+                        &row.KpiScore, &row.CompetencyScore, &row.TotalScore, &row.RatingLabel,
+                        &status, &row.EvaluatorName, &row.Approver, &createdAt); err != nil {
                         return nil, err
                 }
                 if label, ok := EvaluationStatusLabels[status]; ok {
@@ -100,6 +103,7 @@ func (s *Store) ReportBellCurveData(ctx context.Context) (*ReportBellCurve, erro
                         policy = *p
                 }
         }
+        policy.Labels = bellcurve.CategoryLabels
 
         type agg struct {
                 name           string

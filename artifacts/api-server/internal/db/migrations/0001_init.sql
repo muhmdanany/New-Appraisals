@@ -288,6 +288,8 @@ CREATE TABLE "EvaluationItem" (
     "label" TEXT NOT NULL,
     "score" DOUBLE PRECISION,
     "note" TEXT,
+    "objected" BOOLEAN NOT NULL DEFAULT false,
+    "objectionNote" TEXT,
 
     CONSTRAINT "EvaluationItem_pkey" PRIMARY KEY ("id")
 );
