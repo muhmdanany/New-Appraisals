@@ -60,7 +60,7 @@ func (h *Handler) CreateEmployee(w http.ResponseWriter, r *http.Request) {
         }
         id, err := h.Store.CreateEmployee(r.Context(), *in)
         if err != nil {
-                httpx.WriteErr(w, err)
+                writeDBErr(w, err)
                 return
         }
         emp, _ := h.Store.EmployeeByID(r.Context(), id)
@@ -77,7 +77,7 @@ func (h *Handler) UpdateEmployee(w http.ResponseWriter, r *http.Request) {
         }
         updated, err := h.Store.UpdateEmployee(r.Context(), id, *in)
         if err != nil {
-                httpx.WriteErr(w, err)
+                writeDBErr(w, err)
                 return
         }
         if !updated {

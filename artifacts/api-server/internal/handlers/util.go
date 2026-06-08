@@ -1,13 +1,32 @@
 package handlers
 
 import (
+        "errors"
         "net/http"
         "strconv"
         "strings"
 
         "competency/internal/domain"
         "competency/internal/httpx"
+
+        "github.com/jackc/pgconn"
 )
+
+// writeDBErr maps known Postgres errors (e.g. unique violations) to friendly
+// Arabic problem responses, falling back to the generic error writer.
+func writeDBErr(w http.ResponseWriter, err error) {
+        var pgErr *pgconn.PgError
+        if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+                field := pgErr.ConstraintName + " " + pgErr.Detail
+                msg := "القيمة مكررة، يوجد سجل بنفس البيانات"
+                if strings.Contains(strings.ToLower(field), "employeenumber") {
+                        msg = "الرقم الوظيفي مستخدم مسبقًا"
+                }
+                httpx.Error(w, http.StatusConflict, msg)
+                return
+        }
+        httpx.WriteErr(w, err)
+}
 
 func qInt(r *http.Request, key string) int {
         v := r.URL.Query().Get(key)

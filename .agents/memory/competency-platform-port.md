@@ -59,3 +59,13 @@ mutation endpoint; default `useCanManage` is [ADMIN].
 Backend `validateEnum` rejects invalid enum values with 400. contractType (jobs)
 and competency level/type are Postgres enums — render them as `SelectField`s with
 valid options + a sane default, never free-text inputs.
+
+## Postgres errors don't auto-map to HTTP — map unique violations explicitly
+`httpx.WriteErr` only special-cases `*httpx.APIError`; any raw DB error (e.g. a
+unique-constraint violation) falls through to a generic 500. Handlers that do
+INSERT/UPDATE on user input must map pg errors themselves.
+**Why:** a duplicate `employeeNumber` surfaced as a raw 500 + generic "حدث خطأ".
+**How to apply:** use the `writeDBErr` helper (handlers/util.go) which detects
+`*pgconn.PgError` code 23505 and returns 409 with an Arabic message; reuse it for
+any new create/update handler with unique constraints. Frontend reads `err.status`
++ `err.data.detail` (ApiError shape) to show the server message on 409.

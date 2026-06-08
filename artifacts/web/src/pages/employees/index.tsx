@@ -87,7 +87,14 @@ export default function Employees() {
       setOpen(false);
       qc.invalidateQueries({ queryKey: getListEmployeesQueryKey() });
     };
-    const onError = () => toast({ title: "حدث خطأ", variant: "destructive" });
+    const onError = (e: unknown) => {
+      const err = e as { status?: number; data?: { detail?: string } };
+      const title =
+        err?.status === 409
+          ? err.data?.detail ?? "الرقم الوظيفي مستخدم مسبقًا"
+          : "حدث خطأ";
+      toast({ title, variant: "destructive" });
+    };
     if (editing) update.mutate({ id: editing.id, data }, { onSuccess, onError });
     else create.mutate({ data }, { onSuccess, onError });
   };
