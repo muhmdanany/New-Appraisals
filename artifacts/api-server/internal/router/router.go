@@ -12,8 +12,13 @@ import (
         "competency/internal/identity"
 )
 
-// New builds the chi router. The system is open: there is no authentication or
-// role-based access control, so every route is mounted directly.
+// New builds the chi router. The system is password-less: identity is resolved
+// from the X-User-Id header (identity.Resolver), and authorization is enforced
+// per route. Health checks and the identity picker (/users) are the only routes
+// reachable without a selected identity. Administrative catalog mutations
+// (jobs, competencies, grades, KPIs, career paths, employees) are gated to
+// org-wide roles (ADMIN/HR_MANAGER); evaluation/report handlers enforce their
+// own finer-grained scope internally.
 func New(h *handlers.Handler) http.Handler {
         r := chi.NewRouter()
         r.Use(middleware.RequestID)
@@ -28,72 +33,81 @@ func New(h *handlers.Handler) http.Handler {
                 r.Get("/healthz", h.Healthz)
                 r.Get("/health", h.Health)
 
-                // Selectable identities (no password login).
+                // Selectable identities — must be reachable before an identity is picked.
                 r.Get("/users", h.ListUsers)
 
-                // Departments.
-                r.Get("/departments", h.ListDepartments)
+                // Everything below requires a selected identity.
+                r.Group(func(r chi.Router) {
+                        r.Use(h.RequireAuth)
 
-                // Dashboard.
-                r.Get("/dashboard/stats", h.DashboardStats)
-                r.Get("/dashboard/analytics", h.DashboardAnalytics)
+                        // Org-wide only: administrative mutation. Reads stay open to any
+                        // authenticated identity.
+                        admin := h.RequireOrgWide
 
-                // Competencies.
-                r.Get("/competencies", h.ListCompetencies)
-                r.Get("/competencies/options", h.CompetencyOptions)
-                r.Post("/competencies", h.CreateCompetency)
-                r.Put("/competencies/{id}", h.UpdateCompetency)
-                r.Delete("/competencies/{id}", h.DeleteCompetency)
-                r.Post("/competencies/generate", h.GenerateCompetencies)
-                r.Post("/competencies/import", h.ImportCompetencies)
+                        // Departments.
+                        r.Get("/departments", h.ListDepartments)
 
-                // Grades.
-                r.Get("/grades", h.ListGrades)
-                r.Post("/grades", h.CreateGrade)
-                r.Post("/grades/import", h.ImportGrades)
+                        // Dashboard.
+                        r.Get("/dashboard/stats", h.DashboardStats)
+                        r.Get("/dashboard/analytics", h.DashboardAnalytics)
 
-                // Jobs.
-                r.Get("/jobs", h.ListJobs)
-                r.Get("/jobs/{id}", h.GetJob)
-                r.Get("/jobs/{id}/profile", h.JobProfile)
-                r.Post("/jobs", h.CreateJob)
-                r.Put("/jobs/{id}", h.UpdateJob)
-                r.Post("/jobs/{id}/generate-description", h.GenerateJobDescription)
+                        // Competencies.
+                        r.Get("/competencies", h.ListCompetencies)
+                        r.Get("/competencies/options", h.CompetencyOptions)
+                        r.With(admin).Post("/competencies", h.CreateCompetency)
+                        r.With(admin).Put("/competencies/{id}", h.UpdateCompetency)
+                        r.With(admin).Delete("/competencies/{id}", h.DeleteCompetency)
+                        r.With(admin).Post("/competencies/generate", h.GenerateCompetencies)
+                        r.With(admin).Post("/competencies/import", h.ImportCompetencies)
 
-                // Employees.
-                r.Get("/employees", h.ListEmployees)
-                r.Post("/employees", h.CreateEmployee)
-                r.Put("/employees/{id}", h.UpdateEmployee)
+                        // Grades.
+                        r.Get("/grades", h.ListGrades)
+                        r.With(admin).Post("/grades", h.CreateGrade)
+                        r.With(admin).Post("/grades/import", h.ImportGrades)
 
-                // KPIs.
-                r.Get("/kpis", h.ListKpis)
-                r.Get("/kpis/{jobId}", h.GetKpiSet)
-                r.Put("/kpis/{jobId}", h.SaveKpiSet)
-                r.Post("/kpis/{jobId}/generate", h.GenerateKpis)
+                        // Jobs.
+                        r.Get("/jobs", h.ListJobs)
+                        r.Get("/jobs/{id}", h.GetJob)
+                        r.Get("/jobs/{id}/profile", h.JobProfile)
+                        r.With(admin).Post("/jobs", h.CreateJob)
+                        r.With(admin).Put("/jobs/{id}", h.UpdateJob)
+                        r.With(admin).Post("/jobs/{id}/generate-description", h.GenerateJobDescription)
 
-                // Career paths.
-                r.Get("/career-paths", h.ListCareerPaths)
-                r.Post("/career-paths", h.CreateCareerPath)
-                r.Put("/career-paths/{id}", h.UpdateCareerPath)
-                r.Post("/career-paths/generate", h.GenerateCareerPath)
+                        // Employees. (Handlers also self-enforce scope/role.)
+                        r.Get("/employees", h.ListEmployees)
+                        r.With(admin).Post("/employees", h.CreateEmployee)
+                        r.With(admin).Put("/employees/{id}", h.UpdateEmployee)
 
-                // Evaluations.
-                r.Get("/evaluations", h.ListEvaluations)
-                r.Get("/evaluations/form-data", h.EvaluationFormData)
-                r.Get("/evaluations/department-distribution", h.DepartmentDistribution)
-                r.Get("/evaluations/{id}", h.GetEvaluation)
-                r.Post("/evaluations", h.CreateEvaluation)
-                r.Put("/evaluations/{id}", h.UpdateEvaluation)
-                r.Post("/evaluations/{id}/submit", h.SubmitEvaluation)
-                r.Post("/evaluations/{id}/approve", h.ApproveEvaluation)
-                r.Post("/evaluations/{id}/reject", h.RejectEvaluation)
-                r.Post("/evaluations/{id}/acknowledge", h.AcknowledgeEvaluation)
-                r.Post("/evaluations/{id}/object", h.ObjectEvaluation)
+                        // KPIs.
+                        r.Get("/kpis", h.ListKpis)
+                        r.Get("/kpis/{jobId}", h.GetKpiSet)
+                        r.With(admin).Put("/kpis/{jobId}", h.SaveKpiSet)
+                        r.With(admin).Post("/kpis/{jobId}/generate", h.GenerateKpis)
 
-                // Reports.
-                r.Get("/reports/evaluations", h.ReportEvaluations)
-                r.Get("/reports/bell-curve", h.ReportBellCurve)
-                r.Get("/reports/org-tree", h.ReportOrgTree)
+                        // Career paths.
+                        r.Get("/career-paths", h.ListCareerPaths)
+                        r.With(admin).Post("/career-paths", h.CreateCareerPath)
+                        r.With(admin).Put("/career-paths/{id}", h.UpdateCareerPath)
+                        r.With(admin).Post("/career-paths/generate", h.GenerateCareerPath)
+
+                        // Evaluations. (Handlers self-enforce role + subtree scope.)
+                        r.Get("/evaluations", h.ListEvaluations)
+                        r.Get("/evaluations/form-data", h.EvaluationFormData)
+                        r.Get("/evaluations/department-distribution", h.DepartmentDistribution)
+                        r.Get("/evaluations/{id}", h.GetEvaluation)
+                        r.Post("/evaluations", h.CreateEvaluation)
+                        r.Put("/evaluations/{id}", h.UpdateEvaluation)
+                        r.Post("/evaluations/{id}/submit", h.SubmitEvaluation)
+                        r.Post("/evaluations/{id}/approve", h.ApproveEvaluation)
+                        r.Post("/evaluations/{id}/reject", h.RejectEvaluation)
+                        r.Post("/evaluations/{id}/acknowledge", h.AcknowledgeEvaluation)
+                        r.Post("/evaluations/{id}/object", h.ObjectEvaluation)
+
+                        // Reports. (Handlers self-enforce role + scope.)
+                        r.Get("/reports/evaluations", h.ReportEvaluations)
+                        r.Get("/reports/bell-curve", h.ReportBellCurve)
+                        r.Get("/reports/org-tree", h.ReportOrgTree)
+                })
         })
 
         return r

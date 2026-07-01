@@ -18,8 +18,12 @@ The app is Arabic/RTL. **Always respond to the user in Arabic.**
 ## Authorization must be enforced server-side, per handler
 **Why:** frontend nav/action gating is UX-only. Every sensitive endpoint must independently
 enforce identity + role/scope, or it leaks/mutates data across scopes (Broken Access Control).
-**How to apply:** when adding ANY new endpoint, start with `requireUser`, then apply the role/scope
-rule below. A missing check is a real security hole, not a style issue.
+**How to apply:** the router puts everything except health + `/users` (the pre-identity picker)
+behind a `RequireAuth` group; administrative catalog mutations (jobs, competencies, grades, KPIs,
+career paths, employees) are wrapped with `RequireOrgWide` (ADMIN/HR) via `r.With(admin)`.
+Evaluation/report handlers self-enforce finer role+subtree scope internally. When adding ANY new
+endpoint, put it in the authed group and add the matching middleware / in-handler `requireUser` +
+role check. A missing check is a real security hole, not a style issue.
 
 ### Role rules (roles: ADMIN, HR_MANAGER, FIRST_LEVEL_MANAGER, SECOND_LEVEL_MANAGER, EMPLOYEE)
 - Org-wide read/reports and employee record mutations (create/update/import): ADMIN + HR_MANAGER
