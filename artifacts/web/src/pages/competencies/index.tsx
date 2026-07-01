@@ -4,6 +4,8 @@ import {
   useCreateCompetency,
   useUpdateCompetency,
   useDeleteCompetency,
+  useListJobs,
+  useGenerateCompetencies,
   getListCompetenciesQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -21,8 +23,16 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Pencil, Trash2 } from "lucide-react";
+import { Plus, Pencil, Trash2, Sparkles, Loader2 } from "lucide-react";
 import { FormDialog, TextField, TextAreaField, SelectField, useCanManage } from "@/components/form-fields";
 
 const TYPE_OPTIONS = [
@@ -58,6 +68,11 @@ export default function Competencies() {
   const create = useCreateCompetency();
   const update = useUpdateCompetency();
   const del = useDeleteCompetency();
+  const generate = useGenerateCompetencies();
+  const { data: jobs } = useListJobs();
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiJobId, setAiJobId] = useState("");
+  const [aiResults, setAiResults] = useState<{ name: string; type: string; level?: string; description?: string; indicators?: string }[]>([]);
 
   const openCreate = () => {
     setEditing(null);
@@ -121,10 +136,16 @@ export default function Competencies() {
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold text-foreground">الجدارات</h1>
         {canManage && (
-          <Button onClick={openCreate}>
-            <Plus className="w-4 h-4 ml-2" />
-            إضافة جدارة
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => { setAiOpen(true); setAiResults([]); setAiJobId(""); }}>
+              <Sparkles className="w-4 h-4 ml-2" />
+              توليد بالذكاء الاصطناعي
+            </Button>
+            <Button onClick={openCreate}>
+              <Plus className="w-4 h-4 ml-2" />
+              إضافة جدارة
+            </Button>
+          </div>
         )}
       </div>
       <Card>
@@ -215,6 +236,81 @@ export default function Competencies() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* AI Generate Dialog */}
+      <Dialog open={aiOpen} onOpenChange={setAiOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>توليد جدارات بالذكاء الاصطناعي</DialogTitle>
+            <DialogDescription>اختر وظيفة لتوليد الجدارات المناسبة لها تلقائياً.</DialogDescription>
+          </DialogHeader>
+          {aiResults.length === 0 ? (
+            <div className="space-y-3">
+              <SelectField
+                label="الوظيفة"
+                value={aiJobId}
+                onChange={setAiJobId}
+                options={(jobs ?? []).map((j: any) => ({ value: j.id, label: j.name }))}
+                required
+              />
+              <Button
+                disabled={!aiJobId || generate.isPending}
+                className="w-full"
+                onClick={() => {
+                  generate.mutate(
+                    { data: { jobId: aiJobId } },
+                    {
+                      onSuccess: (res) => setAiResults(res.competencies ?? []),
+                      onError: () => toast({ title: "فشل التوليد — تأكد من إعداد مفتاح OpenRouter", variant: "destructive" }),
+                    },
+                  );
+                }}
+              >
+                {generate.isPending ? <Loader2 className="size-4 animate-spin ml-2" /> : <Sparkles className="size-4 ml-2" />}
+                توليد
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-2 max-h-[60vh] overflow-y-auto">
+              {aiResults.map((r, i) => (
+                <Card key={i} className="p-3 text-sm">
+                  <div className="font-bold">{r.name}</div>
+                  <div className="text-xs text-muted-foreground">{typeLabel(r.type)} · {r.level ? levelLabel(r.level) : "—"}</div>
+                  {r.description && <div className="text-xs mt-1">{r.description}</div>}
+                </Card>
+              ))}
+            </div>
+          )}
+          {aiResults.length > 0 && (
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setAiResults([])}>إعادة التوليد</Button>
+              <Button
+                onClick={() => {
+                  Promise.all(
+                    aiResults.map((r) =>
+                      create.mutateAsync({
+                        data: {
+                          name: r.name,
+                          type: r.type,
+                          level: r.level || undefined,
+                          description: r.description || undefined,
+                          indicators: r.indicators || undefined,
+                        },
+                      }),
+                    ),
+                  ).then(() => {
+                    toast({ title: `تمت إضافة ${aiResults.length} جدارة` });
+                    setAiOpen(false);
+                    invalidate();
+                  });
+                }}
+              >
+                حفظ الكل ({aiResults.length})
+              </Button>
+            </DialogFooter>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -3,6 +3,7 @@ import {
   useListCareerPaths,
   useCreateCareerPath,
   useUpdateCareerPath,
+  useGenerateCareerPath,
   getListCareerPathsQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -13,8 +14,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Pencil, Trash2 } from "lucide-react";
+import { Plus, Pencil, Trash2, Sparkles, Loader2 } from "lucide-react";
 import { FormDialog, TextField, TextAreaField, useCanManage } from "@/components/form-fields";
 
 type StageRow = {
@@ -66,6 +75,9 @@ export default function CareerPaths() {
   const canManage = useCanManage();
   const create = useCreateCareerPath();
   const update = useUpdateCareerPath();
+  const generate = useGenerateCareerPath();
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiField, setAiField] = useState("");
 
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Row | null>(null);
@@ -142,10 +154,16 @@ export default function CareerPaths() {
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold text-foreground">المسارات المهنية</h1>
         {canManage && (
-          <Button onClick={openCreate}>
-            <Plus className="w-4 h-4 ml-2" />
-            إضافة مسار
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => { setAiOpen(true); setAiField(""); }}>
+              <Sparkles className="w-4 h-4 ml-2" />
+              توليد بالذكاء الاصطناعي
+            </Button>
+            <Button onClick={openCreate}>
+              <Plus className="w-4 h-4 ml-2" />
+              إضافة مسار
+            </Button>
+          </div>
         )}
       </div>
       <Card>
@@ -185,6 +203,42 @@ export default function CareerPaths() {
           )}
         </CardContent>
       </Card>
+
+      {/* Timeline View */}
+      {paths && paths.length > 0 && (
+        <div className="space-y-4">
+          <h2 className="text-lg font-bold text-foreground">عرض المراحل</h2>
+          {paths.map((path) => {
+            const p = path as Row;
+            if (!p.stages || p.stages.length === 0) return null;
+            return (
+              <Card key={p.id} className="p-4">
+                <h3 className="text-sm font-bold mb-3">{p.name} {p.field && `— ${p.field}`}</h3>
+                <div className="flex gap-2 overflow-x-auto pb-2">
+                  {p.stages!.map((s, i) => (
+                    <div
+                      key={i}
+                      className="flex-shrink-0 w-44 rounded-lg border p-3 text-xs space-y-1"
+                      style={{
+                        borderColor: `hsl(${210 + i * 30}, 60%, 50%)`,
+                        background: `hsl(${210 + i * 30}, 60%, 97%)`,
+                      }}
+                    >
+                      <div className="font-bold text-sm">{s.title}</div>
+                      {s.level && <div className="text-muted-foreground">المستوى: {s.level}</div>}
+                      {s.gradeNum && <div className="text-muted-foreground">الدرجة: {s.gradeNum}</div>}
+                      {s.durationInRole && <div className="text-muted-foreground">المدة: {s.durationInRole}</div>}
+                      {i < p.stages!.length - 1 && (
+                        <div className="text-center text-lg text-muted-foreground">→</div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            );
+          })}
+        </div>
+      )}
 
       <FormDialog
         open={open}
@@ -260,6 +314,57 @@ export default function CareerPaths() {
           ))}
         </div>
       </FormDialog>
+
+      {/* AI Generate Dialog */}
+      <Dialog open={aiOpen} onOpenChange={setAiOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>توليد مسار مهني بالذكاء الاصطناعي</DialogTitle>
+            <DialogDescription>أدخل المجال وسيتم توليد مسار مهني متكامل بالمراحل.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <TextField label="المجال" value={aiField} onChange={setAiField} required />
+            <Button
+              disabled={!aiField.trim() || generate.isPending}
+              className="w-full"
+              onClick={() => {
+                generate.mutate(
+                  { data: { field: aiField.trim() } },
+                  {
+                    onSuccess: (res) => {
+                      const stgs = (res.stages ?? []).map((s) => ({
+                        title: s.title,
+                        level: s.level ?? "",
+                        gradeNum: s.gradeNum ?? "",
+                        durationInRole: s.durationInRole ?? "",
+                        description: s.description ?? "",
+                        requiredCompetencies: (s.requiredCompetencies ?? []).join("، "),
+                        promotionCriteria: (s.promotionCriteria ?? []).join("، "),
+                      }));
+                      setForm({
+                        name: res.name ?? "",
+                        field: res.field ?? aiField,
+                        duration: res.duration ?? "",
+                        description: res.description ?? "",
+                      });
+                      setStages(stgs.length ? stgs : [{ ...emptyStage }]);
+                      setEditing(null);
+                      setAiOpen(false);
+                      setOpen(true);
+                      toast({ title: "تم توليد المسار — راجع البيانات ثم احفظ" });
+                    },
+                    onError: () =>
+                      toast({ title: "فشل التوليد — تأكد من إعداد مفتاح OpenRouter", variant: "destructive" }),
+                  },
+                );
+              }}
+            >
+              {generate.isPending ? <Loader2 className="size-4 animate-spin ml-2" /> : <Sparkles className="size-4 ml-2" />}
+              توليد
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

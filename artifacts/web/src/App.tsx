@@ -18,10 +18,14 @@ const CareerPaths = lazy(() => import("@/pages/career-paths"));
 const Kpis = lazy(() => import("@/pages/kpis"));
 const JobKpis = lazy(() => import("@/pages/kpis/view"));
 const Evaluations = lazy(() => import("@/pages/evaluations"));
+const NewEvaluation = lazy(() => import("@/pages/evaluations/new"));
+const EditEvaluation = lazy(() => import("@/pages/evaluations/edit"));
+const EvaluationGuide = lazy(() => import("@/pages/evaluations/guide"));
 const EvaluationDetail = lazy(() => import("@/pages/evaluations/detail"));
 const Reports = lazy(() => import("@/pages/reports"));
 const BellCurve = lazy(() => import("@/pages/bell-curve"));
 const OrgChart = lazy(() => import("@/pages/org-chart"));
+const Admin = lazy(() => import("@/pages/admin"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -54,10 +58,14 @@ function Router() {
       <Route path="/kpis" component={Kpis} />
       <Route path="/kpis/:jobId" component={JobKpis} />
       <Route path="/evaluations" component={Evaluations} />
+      <Route path="/evaluations/new" component={NewEvaluation} />
+      <Route path="/evaluations/guide" component={EvaluationGuide} />
+      <Route path="/evaluations/:id/edit" component={EditEvaluation} />
       <Route path="/evaluations/:id" component={EvaluationDetail} />
       <Route path="/reports" component={Reports} />
       <Route path="/bell-curve" component={BellCurve} />
       <Route path="/org-chart" component={OrgChart} />
+      <Route path="/admin" component={Admin} />
       <Route component={NotFound} />
     </Switch>
   );

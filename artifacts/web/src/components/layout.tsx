@@ -14,7 +14,8 @@ import {
   Network,
   Menu,
   UserRound,
-  LogOut
+  LogOut,
+  Settings,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useIdentity, ROLE_LABELS } from "@/lib/identity";
@@ -31,6 +32,7 @@ const NAV_ITEMS = [
   { href: "/reports", label: "التقارير", icon: FileBarChart },
   { href: "/bell-curve", label: "التوزيع الطبيعي", icon: PieChart },
   { href: "/org-chart", label: "الهيكل التنظيمي", icon: Network },
+  { href: "/admin", label: "لوحة الإدارة", icon: Settings },
 ];
 
 // Which nav destinations each role may see. ADMIN/HR see everything;

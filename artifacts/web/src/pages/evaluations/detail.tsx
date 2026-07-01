@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useParams } from "wouter";
+import { useParams, Link } from "wouter";
 import {
   useGetEvaluation,
   getGetEvaluationQueryKey,
@@ -20,7 +20,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useToast } from "@/hooks/use-toast";
 import { FormDialog } from "@/components/form-fields";
 import { useIdentity } from "@/lib/identity";
-import { CheckCircle, XCircle, Send, ThumbsUp, AlertTriangle } from "lucide-react";
+import { CheckCircle, XCircle, Send, ThumbsUp, AlertTriangle, Pencil, Printer } from "lucide-react";
 
 const STATUS_LABELS: Record<string, string> = {
   DRAFT: "مسودة",
@@ -61,6 +61,10 @@ export default function EvaluationDetail() {
   const { user } = useIdentity();
   const role = user?.role;
   const status = evaluation?.status;
+
+  // Editing: admin or first-level manager, when DRAFT or REJECTED
+  const editable = (role === "ADMIN" || role === "FIRST_LEVEL_MANAGER") &&
+    (status === "DRAFT" || status === "REJECTED");
 
   // Submitting for approval: admin or the direct (first-level) manager.
   const canSubmit = role === "ADMIN" || role === "FIRST_LEVEL_MANAGER";
@@ -115,7 +119,19 @@ export default function EvaluationDetail() {
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold text-foreground">تفاصيل التقييم</h1>
         {!isLoading && evaluation && (
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
+            <Button variant="outline" size="sm" onClick={() => window.print()}>
+              <Printer className="w-4 h-4 ml-2" />
+              طباعة
+            </Button>
+            {editable && (
+              <Button variant="outline" size="sm" asChild>
+                <Link href={`/evaluations/${id}/edit`}>
+                  <Pencil className="w-4 h-4 ml-2" />
+                  تعديل
+                </Link>
+              </Button>
+            )}
             {status === "DRAFT" && canSubmit && (
               <Button onClick={() => submit.mutate({ id: id! }, { onSuccess: ok("تم إرسال التقييم للاعتماد"), onError: err })} disabled={submit.isPending}>
                 <Send className="w-4 h-4 ml-2" />

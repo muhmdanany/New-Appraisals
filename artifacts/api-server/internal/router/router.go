@@ -77,6 +77,7 @@ func New(h *handlers.Handler) http.Handler {
                         r.Get("/employees", h.ListEmployees)
                         r.With(admin).Post("/employees", h.CreateEmployee)
                         r.With(admin).Put("/employees/{id}", h.UpdateEmployee)
+                        r.With(admin).Post("/employees/import", h.ImportEmployees)
 
                         // KPIs.
                         r.Get("/kpis", h.ListKpis)
@@ -107,6 +108,15 @@ func New(h *handlers.Handler) http.Handler {
                         r.Get("/reports/evaluations", h.ReportEvaluations)
                         r.Get("/reports/bell-curve", h.ReportBellCurve)
                         r.Get("/reports/org-tree", h.ReportOrgTree)
+
+                        // Admin panel. (ADMIN/HR_MANAGER only)
+                        r.With(admin).Get("/admin/users", h.AdminListUsers)
+                        r.With(admin).Post("/users", h.CreateUser)
+                        r.With(admin).Put("/users/{id}", h.UpdateUser)
+                        r.With(admin).Delete("/users/{id}", h.DeactivateUser)
+                        r.With(admin).Post("/admin/import-with-roles", h.AdminImportWithRoles)
+                        r.With(admin).Get("/settings/evaluation", h.GetEvaluationSettings)
+                        r.With(admin).Put("/settings/evaluation", h.SaveEvaluationSettings)
                 })
         })
 
