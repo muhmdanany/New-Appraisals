@@ -1,0 +1,1424 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: Competency Platform REST API
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+  - name: departments
+  - name: dashboard
+  - name: competencies
+  - name: grades
+  - name: jobs
+  - name: employees
+  - name: kpis
+  - name: career-paths
+  - name: evaluations
+  - name: reports
+paths:
+  /users:
+    get:
+      operationId: listUsers
+      tags: [users]
+      summary: قائمة المستخدمين المتاحين لاختيار الهوية
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/User"
+
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  /departments:
+    get:
+      operationId: listDepartments
+      tags: [departments]
+      responses:
+        "200":
+          description: Departments
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Department"
+
+  /dashboard/stats:
+    get:
+      operationId: dashboardStats
+      tags: [dashboard]
+      responses:
+        "200":
+          description: Stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardStats"
+  /dashboard/analytics:
+    get:
+      operationId: dashboardAnalytics
+      tags: [dashboard]
+      responses:
+        "200":
+          description: Analytics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardAnalytics"
+
+  /competencies:
+    get:
+      operationId: listCompetencies
+      tags: [competencies]
+      parameters:
+        - { name: search, in: query, schema: { type: string } }
+        - { name: type, in: query, schema: { type: string } }
+        - { name: take, in: query, schema: { type: integer } }
+        - { name: skip, in: query, schema: { type: integer } }
+      responses:
+        "200":
+          description: Competencies
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Competency"
+    post:
+      operationId: createCompetency
+      tags: [competencies]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CompetencyInput"
+      responses:
+        "200":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Competency"
+  /competencies/options:
+    get:
+      operationId: competencyOptions
+      tags: [competencies]
+      responses:
+        "200":
+          description: Options
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CompetencyOption"
+  /competencies/{id}:
+    put:
+      operationId: updateCompetency
+      tags: [competencies]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CompetencyInput"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Competency"
+    delete:
+      operationId: deleteCompetency
+      tags: [competencies]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+  /competencies/generate:
+    post:
+      operationId: generateCompetencies
+      tags: [competencies]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GenerateCompetenciesInput"
+      responses:
+        "200":
+          description: Generated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GeneratedCompetencies"
+  /competencies/import:
+    post:
+      operationId: importCompetencies
+      tags: [competencies]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CompetencyImportInput"
+      responses:
+        "200":
+          description: Imported
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportResult"
+
+  /grades:
+    get:
+      operationId: listGrades
+      tags: [grades]
+      responses:
+        "200":
+          description: Grades
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Grade"
+    post:
+      operationId: createGrade
+      tags: [grades]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GradeInput"
+      responses:
+        "200":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Grade"
+  /grades/import:
+    post:
+      operationId: importGrades
+      tags: [grades]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GradeImportInput"
+      responses:
+        "200":
+          description: Imported
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportResult"
+
+  /jobs:
+    get:
+      operationId: listJobs
+      tags: [jobs]
+      parameters:
+        - { name: search, in: query, schema: { type: string } }
+        - { name: take, in: query, schema: { type: integer } }
+        - { name: skip, in: query, schema: { type: integer } }
+      responses:
+        "200":
+          description: Jobs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Job"
+    post:
+      operationId: createJob
+      tags: [jobs]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/JobInput"
+      responses:
+        "200":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Job"
+  /jobs/{id}:
+    get:
+      operationId: getJob
+      tags: [jobs]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Job
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Job"
+    put:
+      operationId: updateJob
+      tags: [jobs]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/JobInput"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Job"
+  /jobs/{id}/profile:
+    get:
+      operationId: jobProfile
+      tags: [jobs]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JobProfile"
+  /jobs/{id}/generate-description:
+    post:
+      operationId: generateJobDescription
+      tags: [jobs]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Generated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GeneratedDescription"
+
+  /employees:
+    get:
+      operationId: listEmployees
+      tags: [employees]
+      parameters:
+        - { name: search, in: query, schema: { type: string } }
+      responses:
+        "200":
+          description: Employees
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Employee"
+    post:
+      operationId: createEmployee
+      tags: [employees]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EmployeeInput"
+      responses:
+        "200":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Employee"
+  /employees/{id}:
+    put:
+      operationId: updateEmployee
+      tags: [employees]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EmployeeInput"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Employee"
+
+  /kpis:
+    get:
+      operationId: listKpis
+      tags: [kpis]
+      responses:
+        "200":
+          description: KPI summaries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/KpiSummary"
+  /kpis/{jobId}:
+    get:
+      operationId: getKpiSet
+      tags: [kpis]
+      parameters:
+        - { name: jobId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: KPI set
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KpiSet"
+    put:
+      operationId: saveKpiSet
+      tags: [kpis]
+      parameters:
+        - { name: jobId, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/KpiSetInput"
+      responses:
+        "200":
+          description: Saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KpiSet"
+  /kpis/{jobId}/generate:
+    post:
+      operationId: generateKpis
+      tags: [kpis]
+      parameters:
+        - { name: jobId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Generated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GeneratedKpis"
+
+  /career-paths:
+    get:
+      operationId: listCareerPaths
+      tags: [career-paths]
+      responses:
+        "200":
+          description: Career paths
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CareerPath"
+    post:
+      operationId: createCareerPath
+      tags: [career-paths]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CareerPathInput"
+      responses:
+        "200":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CareerPath"
+  /career-paths/{id}:
+    put:
+      operationId: updateCareerPath
+      tags: [career-paths]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CareerPathInput"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CareerPath"
+  /career-paths/generate:
+    post:
+      operationId: generateCareerPath
+      tags: [career-paths]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GenerateCareerPathInput"
+      responses:
+        "200":
+          description: Generated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GeneratedCareerPath"
+
+  /evaluations:
+    get:
+      operationId: listEvaluations
+      tags: [evaluations]
+      parameters:
+        - { name: status, in: query, schema: { type: string } }
+      responses:
+        "200":
+          description: Evaluations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Evaluation"
+    post:
+      operationId: createEvaluation
+      tags: [evaluations]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EvaluationInput"
+      responses:
+        "200":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IdResponse"
+  /evaluations/form-data:
+    get:
+      operationId: evaluationFormData
+      tags: [evaluations]
+      parameters:
+        - { name: employeeId, in: query, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Form data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EvaluationFormData"
+  /evaluations/department-distribution:
+    get:
+      operationId: departmentDistribution
+      tags: [evaluations]
+      parameters:
+        - { name: employeeId, in: query, required: true, schema: { type: string } }
+        - { name: period, in: query, schema: { type: string } }
+        - { name: excludeEvaluationId, in: query, schema: { type: string } }
+      responses:
+        "200":
+          description: Distribution
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DepartmentDistribution"
+  /evaluations/{id}:
+    get:
+      operationId: getEvaluation
+      tags: [evaluations]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Evaluation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Evaluation"
+    put:
+      operationId: updateEvaluation
+      tags: [evaluations]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EvaluationUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IdResponse"
+  /evaluations/{id}/submit:
+    post:
+      operationId: submitEvaluation
+      tags: [evaluations]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Submitted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EvaluationStatusResponse"
+  /evaluations/{id}/approve:
+    post:
+      operationId: approveEvaluation
+      tags: [evaluations]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Approved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EvaluationStatusResponse"
+  /evaluations/{id}/reject:
+    post:
+      operationId: rejectEvaluation
+      tags: [evaluations]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RejectInput"
+      responses:
+        "200":
+          description: Rejected
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EvaluationStatusResponse"
+  /evaluations/{id}/acknowledge:
+    post:
+      operationId: acknowledgeEvaluation
+      tags: [evaluations]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Acknowledged
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EvaluationStatusResponse"
+  /evaluations/{id}/object:
+    post:
+      operationId: objectEvaluation
+      tags: [evaluations]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ObjectionInput"
+      responses:
+        "200":
+          description: Objected
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EvaluationStatusResponse"
+
+  /reports/evaluations:
+    get:
+      operationId: reportEvaluations
+      tags: [reports]
+      responses:
+        "200":
+          description: Report rows
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ReportEvaluationRow"
+  /reports/bell-curve:
+    get:
+      operationId: reportBellCurve
+      tags: [reports]
+      responses:
+        "200":
+          description: Bell curve
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BellCurveReport"
+  /reports/org-tree:
+    get:
+      operationId: reportOrgTree
+      tags: [reports]
+      responses:
+        "200":
+          description: Org tree
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/OrgTreeNode"
+
+components:
+  schemas:
+    User:
+      type: object
+      required: [id, email, name, role, isActive]
+      properties:
+        id: { type: string }
+        email: { type: string }
+        name: { type: string }
+        role:
+          type: string
+          enum: [ADMIN, HR_MANAGER, FIRST_LEVEL_MANAGER, SECOND_LEVEL_MANAGER, EMPLOYEE]
+        isActive: { type: boolean }
+        employeeId: { type: ["string", "null"] }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    HealthStatus:
+      type: object
+      properties:
+        status: { type: string }
+      required: [status]
+    OkResponse:
+      type: object
+      properties:
+        ok: { type: boolean }
+      required: [ok]
+    IdResponse:
+      type: object
+      properties:
+        id: { type: string }
+      required: [id]
+    ImportResult:
+      type: object
+      properties:
+        imported: { type: integer }
+      required: [imported]
+    EvaluationStatusResponse:
+      type: object
+      properties:
+        id: { type: string }
+        status: { type: string }
+      required: [id, status]
+
+    Department:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        level: { type: string }
+        parentId: { type: ["string", "null"] }
+      required: [id, name, level]
+
+    DashboardStats:
+      type: object
+      properties:
+        jobs: { type: integer }
+        competencies: { type: integer }
+        grades: { type: integer }
+        evaluations: { type: integer }
+        employees: { type: integer }
+        kpis: { type: integer }
+        careerPaths: { type: integer }
+        departments: { type: integer }
+      required: [jobs, competencies, grades, evaluations, employees, kpis, careerPaths, departments]
+    RatingDistributionItem:
+      type: object
+      properties:
+        label: { type: string }
+        count: { type: integer }
+      required: [label, count]
+    DashboardAnalytics:
+      type: object
+      properties:
+        finalizedCount: { type: integer }
+        averageScore: { type: number }
+        ratingDistribution:
+          type: array
+          items:
+            $ref: "#/components/schemas/RatingDistributionItem"
+        activePolicyName: { type: ["string", "null"] }
+      required: [finalizedCount, averageScore, ratingDistribution]
+
+    Competency:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        type: { type: string }
+        level: { type: string }
+        description: { type: ["string", "null"] }
+        indicators: { type: ["string", "null"] }
+        isShared: { type: boolean }
+        sharedKey: { type: ["string", "null"] }
+        createdAt: { type: string }
+        updatedAt: { type: string }
+      required: [id, name, type, level, isShared]
+    CompetencyOption:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        type: { type: string }
+      required: [id, name, type]
+    CompetencyInput:
+      type: object
+      properties:
+        name: { type: string }
+        type: { type: string }
+        level: { type: string }
+        description: { type: string }
+        indicators: { type: string }
+      required: [name, type]
+    GenerateCompetenciesInput:
+      type: object
+      properties:
+        jobId: { type: string }
+      required: [jobId]
+    GeneratedCompetencyItem:
+      type: object
+      properties:
+        name: { type: string }
+        type: { type: string }
+        level: { type: string }
+        description: { type: string }
+        indicators: { type: string }
+      required: [name, type]
+    GeneratedCompetencies:
+      type: object
+      properties:
+        competencies:
+          type: array
+          items:
+            $ref: "#/components/schemas/GeneratedCompetencyItem"
+      required: [competencies]
+    CompetencyImportInput:
+      type: object
+      properties:
+        rows:
+          type: array
+          items:
+            $ref: "#/components/schemas/CompetencyInput"
+      required: [rows]
+
+    GradeLevel:
+      type: object
+      properties:
+        id: { type: string }
+        gradeId: { type: string }
+        level: { type: integer }
+        label: { type: string }
+        minScore: { type: integer }
+        stayYears: { type: integer }
+        minYrsSecondary: { type: integer }
+        minYrsDiploma: { type: integer }
+        minYrsBachelor: { type: integer }
+        minYrsMaster: { type: integer }
+        minYrsPhd: { type: integer }
+        competencies: { type: ["string", "null"] }
+      required: [id, gradeId, level, label]
+    Grade:
+      type: object
+      properties:
+        id: { type: string }
+        num: { type: string }
+        name: { type: string }
+        classification: { type: ["string", "null"] }
+        leaveDays: { type: integer }
+        salaryMin: { type: ["number", "null"] }
+        salaryMax: { type: ["number", "null"] }
+        housing: { type: ["string", "null"] }
+        transport: { type: ["string", "null"] }
+        bonus: { type: ["string", "null"] }
+        benefits: { type: ["string", "null"] }
+        levels:
+          type: array
+          items:
+            $ref: "#/components/schemas/GradeLevel"
+      required: [id, num, name]
+    GradeLevelInput:
+      type: object
+      properties:
+        level: { type: integer }
+        label: { type: string }
+        minScore: { type: ["integer", "null"] }
+        stayYears: { type: ["integer", "null"] }
+        minYrsSecondary: { type: ["integer", "null"] }
+        minYrsDiploma: { type: ["integer", "null"] }
+        minYrsBachelor: { type: ["integer", "null"] }
+        minYrsMaster: { type: ["integer", "null"] }
+        minYrsPhd: { type: ["integer", "null"] }
+        competencies: { type: ["string", "null"] }
+      required: [level, label]
+    GradeInput:
+      type: object
+      properties:
+        num: { type: string }
+        name: { type: string }
+        classification: { type: ["string", "null"] }
+        leaveDays: { type: ["integer", "null"] }
+        salaryMin: { type: ["number", "null"] }
+        salaryMax: { type: ["number", "null"] }
+        housing: { type: ["string", "null"] }
+        transport: { type: ["string", "null"] }
+        bonus: { type: ["string", "null"] }
+        benefits: { type: ["string", "null"] }
+        levels:
+          type: array
+          items:
+            $ref: "#/components/schemas/GradeLevelInput"
+      required: [num, name]
+    GradeImportInput:
+      type: object
+      properties:
+        rows:
+          type: array
+          items:
+            $ref: "#/components/schemas/GradeInput"
+      required: [rows]
+
+    Job:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        description: { type: ["string", "null"] }
+        contractType: { type: ["string", "null"] }
+        experienceLevel: { type: ["string", "null"] }
+        departmentId: { type: ["string", "null"] }
+        gradeId: { type: ["string", "null"] }
+        createdAt: { type: string }
+        updatedAt: { type: string }
+        departmentName: { type: ["string", "null"] }
+        gradeName: { type: ["string", "null"] }
+        competencyIds:
+          type: array
+          items: { type: string }
+        competencyCount: { type: integer }
+      required: [id, name]
+    JobInput:
+      type: object
+      properties:
+        name: { type: string }
+        description: { type: ["string", "null"] }
+        contractType: { type: string }
+        experienceLevel: { type: ["string", "null"] }
+        departmentId: { type: ["string", "null"] }
+        gradeId: { type: ["string", "null"] }
+        reportsToJobId: { type: ["string", "null"] }
+        competencyIds:
+          type: array
+          items: { type: string }
+      required: [name]
+    JobProfile:
+      type: object
+      properties:
+        job:
+          $ref: "#/components/schemas/Job"
+        competencies:
+          type: array
+          items:
+            $ref: "#/components/schemas/Competency"
+        kpiSet:
+          oneOf:
+            - $ref: "#/components/schemas/KpiSet"
+            - type: "null"
+      required: [job, competencies]
+    GeneratedDescription:
+      type: object
+      properties:
+        description: { type: string }
+      required: [description]
+
+    Employee:
+      type: object
+      properties:
+        id: { type: string }
+        employeeNumber: { type: string }
+        name: { type: string }
+        jobId: { type: ["string", "null"] }
+        departmentId: { type: ["string", "null"] }
+        gradeId: { type: ["string", "null"] }
+        managerId: { type: ["string", "null"] }
+        extraFields:
+          type: object
+          additionalProperties: { type: string }
+        createdAt: { type: string }
+        updatedAt: { type: string }
+        jobName: { type: ["string", "null"] }
+        departmentName: { type: ["string", "null"] }
+        gradeName: { type: ["string", "null"] }
+        managerName: { type: ["string", "null"] }
+      required: [id, employeeNumber, name]
+    EmployeeInput:
+      type: object
+      properties:
+        name: { type: string }
+        employeeNumber: { type: string }
+        jobId: { type: ["string", "null"] }
+        departmentId: { type: ["string", "null"] }
+        gradeId: { type: ["string", "null"] }
+        managerId: { type: ["string", "null"] }
+        extraFields:
+          type: object
+          additionalProperties: { type: string }
+      required: [name, employeeNumber]
+
+    Kpi:
+      type: object
+      properties:
+        id: { type: string }
+        kpiGroupId: { type: string }
+        name: { type: string }
+        description: { type: ["string", "null"] }
+        measure: { type: ["string", "null"] }
+        target: { type: ["string", "null"] }
+        frequency: { type: ["string", "null"] }
+        weight: { type: ["number", "null"] }
+        order: { type: integer }
+      required: [id, name]
+    KpiGroup:
+      type: object
+      properties:
+        id: { type: string }
+        kpiSetId: { type: string }
+        competencyName: { type: string }
+        compType: { type: ["string", "null"] }
+        order: { type: integer }
+        kpis:
+          type: array
+          items:
+            $ref: "#/components/schemas/Kpi"
+      required: [id, competencyName, kpis]
+    KpiSet:
+      type: object
+      properties:
+        id: { type: string }
+        jobId: { type: string }
+        summary: { type: ["string", "null"] }
+        isAiGenerated: { type: boolean }
+        groups:
+          type: array
+          items:
+            $ref: "#/components/schemas/KpiGroup"
+      required: [id, jobId, groups]
+    KpiSummary:
+      type: object
+      properties:
+        jobId: { type: string }
+        jobName: { type: string }
+        departmentName: { type: ["string", "null"] }
+        hasKpiSet: { type: boolean }
+        kpiCount: { type: integer }
+      required: [jobId, jobName, hasKpiSet, kpiCount]
+    KpiInput:
+      type: object
+      properties:
+        name: { type: string }
+        description: { type: ["string", "null"] }
+        measure: { type: ["string", "null"] }
+        target: { type: ["string", "null"] }
+        frequency: { type: ["string", "null"] }
+        weight: { type: ["number", "null"] }
+      required: [name]
+    KpiGroupInput:
+      type: object
+      properties:
+        competencyName: { type: string }
+        compType: { type: ["string", "null"] }
+        kpis:
+          type: array
+          items:
+            $ref: "#/components/schemas/KpiInput"
+      required: [competencyName, kpis]
+    KpiSetInput:
+      type: object
+      properties:
+        summary: { type: ["string", "null"] }
+        isAiGenerated: { type: boolean }
+        groups:
+          type: array
+          items:
+            $ref: "#/components/schemas/KpiGroupInput"
+      required: [groups]
+    GeneratedKpis:
+      type: object
+      properties:
+        summary: { type: string }
+        groups:
+          type: array
+          items:
+            $ref: "#/components/schemas/KpiGroupInput"
+      required: [groups]
+
+    CareerPathStage:
+      type: object
+      properties:
+        id: { type: string }
+        careerPathId: { type: string }
+        order: { type: integer }
+        title: { type: string }
+        level: { type: ["string", "null"] }
+        gradeNum: { type: ["string", "null"] }
+        durationInRole: { type: ["string", "null"] }
+        description: { type: ["string", "null"] }
+        requiredCompetencies:
+          type: array
+          items: { type: string }
+        promotionCriteria:
+          type: array
+          items: { type: string }
+      required: [id, order, title]
+    CareerPath:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        field: { type: ["string", "null"] }
+        duration: { type: ["string", "null"] }
+        description: { type: ["string", "null"] }
+        isAiGenerated: { type: boolean }
+        createdAt: { type: string }
+        stages:
+          type: array
+          items:
+            $ref: "#/components/schemas/CareerPathStage"
+        stageCount: { type: integer }
+      required: [id, name]
+    CareerStageInput:
+      type: object
+      properties:
+        title: { type: string }
+        level: { type: ["string", "null"] }
+        gradeNum: { type: ["string", "null"] }
+        durationInRole: { type: ["string", "null"] }
+        description: { type: ["string", "null"] }
+        requiredCompetencies:
+          type: array
+          items: { type: string }
+        promotionCriteria:
+          type: array
+          items: { type: string }
+      required: [title]
+    CareerPathInput:
+      type: object
+      properties:
+        name: { type: string }
+        field: { type: ["string", "null"] }
+        duration: { type: ["string", "null"] }
+        description: { type: ["string", "null"] }
+        isAiGenerated: { type: boolean }
+        stages:
+          type: array
+          items:
+            $ref: "#/components/schemas/CareerStageInput"
+      required: [name]
+    GenerateCareerPathInput:
+      type: object
+      properties:
+        field: { type: string }
+      required: [field]
+    GeneratedCareerPath:
+      type: object
+      properties:
+        name: { type: string }
+        field: { type: string }
+        duration: { type: string }
+        description: { type: string }
+        stages:
+          type: array
+          items:
+            $ref: "#/components/schemas/CareerStageInput"
+      required: [name, stages]
+
+    EvaluationItem:
+      type: object
+      properties:
+        id: { type: string }
+        evaluationId: { type: string }
+        kind: { type: string }
+        refKey: { type: string }
+        label: { type: string }
+        score: { type: ["number", "null"] }
+        note: { type: ["string", "null"] }
+      required: [id, kind, refKey, label]
+    Evaluation:
+      type: object
+      properties:
+        id: { type: string }
+        employeeId: { type: string }
+        jobId: { type: ["string", "null"] }
+        evaluatorId: { type: ["string", "null"] }
+        approverId: { type: ["string", "null"] }
+        period: { type: string }
+        mode: { type: string }
+        kpiWeight: { type: integer }
+        competencyWeight: { type: integer }
+        kpiScore: { type: ["number", "null"] }
+        competencyScore: { type: ["number", "null"] }
+        totalScore: { type: ["number", "null"] }
+        ratingLabel: { type: ["string", "null"] }
+        status: { type: string }
+        approvedAt: { type: ["string", "null"] }
+        rejectionReason: { type: ["string", "null"] }
+        employeeAck: { type: boolean }
+        objectionNote: { type: ["string", "null"] }
+        createdAt: { type: string }
+        updatedAt: { type: string }
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/EvaluationItem"
+        employeeName: { type: ["string", "null"] }
+        evaluatorName: { type: ["string", "null"] }
+      required: [id, employeeId, period, mode, status]
+    EvaluationKpiInput:
+      type: object
+      properties:
+        name: { type: string }
+        achievement: { type: number }
+        note: { type: ["string", "null"] }
+      required: [name, achievement]
+    EvaluationInput:
+      type: object
+      properties:
+        employeeId: { type: string }
+        period: { type: string }
+        mode: { type: string }
+        kpiWeight: { type: integer }
+        sharedScores:
+          type: object
+          additionalProperties: { type: number }
+        jobScores:
+          type: object
+          additionalProperties: { type: number }
+        kpis:
+          type: array
+          items:
+            $ref: "#/components/schemas/EvaluationKpiInput"
+      required: [employeeId, period, mode]
+    EvaluationUpdate:
+      type: object
+      properties:
+        period: { type: string }
+        mode: { type: string }
+        kpiWeight: { type: integer }
+        sharedScores:
+          type: object
+          additionalProperties: { type: number }
+        jobScores:
+          type: object
+          additionalProperties: { type: number }
+        kpis:
+          type: array
+          items:
+            $ref: "#/components/schemas/EvaluationKpiInput"
+      required: [period, mode]
+    RejectInput:
+      type: object
+      properties:
+        reason: { type: string }
+      required: [reason]
+    ObjectionItemInput:
+      type: object
+      properties:
+        itemId: { type: string }
+        note: { type: ["string", "null"] }
+      required: [itemId]
+    ObjectionInput:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ObjectionItemInput"
+      required: [items]
+
+    FormEmployee:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        employeeNumber: { type: string }
+        jobId: { type: ["string", "null"] }
+        jobName: { type: ["string", "null"] }
+        departmentName: { type: ["string", "null"] }
+      required: [id, name, employeeNumber]
+    FormSharedItem:
+      type: object
+      properties:
+        key: { type: string }
+        name: { type: string }
+        type: { type: string }
+      required: [key, name, type]
+    FormJobCompetency:
+      type: object
+      properties:
+        key: { type: string }
+        name: { type: string }
+        type: { type: string }
+      required: [key, name, type]
+    FormKpi:
+      type: object
+      properties:
+        name: { type: string }
+        target: { type: ["string", "null"] }
+        weight: { type: ["number", "null"] }
+      required: [name]
+    EvaluationFormData:
+      type: object
+      properties:
+        employee:
+          $ref: "#/components/schemas/FormEmployee"
+        shared:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              $ref: "#/components/schemas/FormSharedItem"
+        jobCompetencies:
+          type: array
+          items:
+            $ref: "#/components/schemas/FormJobCompetency"
+        kpis:
+          type: array
+          items:
+            $ref: "#/components/schemas/FormKpi"
+      required: [employee, shared, jobCompetencies, kpis]
+    PolicySet:
+      type: object
+      properties:
+        labels:
+          type: array
+          items: { type: string }
+        above:
+          type: array
+          items: { type: number }
+        achieved:
+          type: array
+          items: { type: number }
+        below:
+          type: array
+          items: { type: number }
+      required: [labels, above, achieved, below]
+    DepartmentDistribution:
+      type: object
+      properties:
+        departmentName: { type: ["string", "null"] }
+        employeeCount: { type: integer }
+        counts:
+          type: array
+          items: { type: integer }
+        evaluatedCount: { type: integer }
+        achievement: { type: number }
+        policy:
+          $ref: "#/components/schemas/PolicySet"
+      required: [employeeCount, counts, evaluatedCount, achievement, policy]
+
+    ReportEvaluationRow:
+      type: object
+      properties:
+        id: { type: string }
+        employeeName: { type: ["string", "null"] }
+        employeeNumber: { type: ["string", "null"] }
+        departmentName: { type: ["string", "null"] }
+        jobName: { type: ["string", "null"] }
+        period: { type: string }
+        status: { type: string }
+        kpiScore: { type: ["number", "null"] }
+        competencyScore: { type: ["number", "null"] }
+        totalScore: { type: ["number", "null"] }
+        ratingLabel: { type: ["string", "null"] }
+        evaluatorName: { type: ["string", "null"] }
+      required: [id, period, status]
+    BellCurveDepartment:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        categories:
+          type: array
+          items: { type: integer }
+        achievement: { type: number }
+        employeeCount: { type: integer }
+        evaluatedCount: { type: integer }
+      required: [id, name, categories, achievement, employeeCount, evaluatedCount]
+    BellCurveReport:
+      type: object
+      properties:
+        policyName: { type: ["string", "null"] }
+        policy:
+          $ref: "#/components/schemas/PolicySet"
+        departments:
+          type: array
+          items:
+            $ref: "#/components/schemas/BellCurveDepartment"
+      required: [policy, departments]
+    OrgTreeNode:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        managerId: { type: ["string", "null"] }
+        jobName: { type: ["string", "null"] }
+        department: { type: ["string", "null"] }
+      required: [id, name]

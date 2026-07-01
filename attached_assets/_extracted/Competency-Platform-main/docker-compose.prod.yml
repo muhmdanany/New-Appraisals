@@ -1,0 +1,59 @@
+# Production-style stack: Postgres + one-shot migrations + the app.
+#
+#   AUTH_SECRET=$(openssl rand -base64 32) docker compose -f docker-compose.prod.yml up --build
+#
+# To use Supabase (or any external DB) instead of the bundled Postgres, set
+# DATABASE_URL and DIRECT_URL in the environment and you can remove the `db`
+# service + the migrate/app `depends_on: db` blocks.
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: competency
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-competency_pw}
+      POSTGRES_DB: competency
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U competency -d competency"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Applies pending migrations, then exits.
+  migrate:
+    build:
+      context: .
+      target: migrator
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql://competency:competency_pw@db:5432/competency?schema=public}
+      DIRECT_URL: ${DIRECT_URL:-postgresql://competency:competency_pw@db:5432/competency?schema=public}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  app:
+    build:
+      context: .
+      target: runner
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql://competency:competency_pw@db:5432/competency?schema=public}
+      DIRECT_URL: ${DIRECT_URL:-postgresql://competency:competency_pw@db:5432/competency?schema=public}
+      AUTH_SECRET: ${AUTH_SECRET:?set AUTH_SECRET (openssl rand -base64 32)}
+      AUTH_URL: ${AUTH_URL:-http://localhost:3000}
+      AUTH_TRUST_HOST: "true"
+      AI_ENABLED: ${AI_ENABLED:-false}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-meta-llama/llama-3.3-70b-instruct:free}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+
+volumes:
+  pgdata:

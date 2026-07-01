@@ -1,0 +1,504 @@
+// Competency Platform — Prisma schema
+// Arabic-first HR competency platform. PostgreSQL (Docker in dev, Supabase in prod).
+
+generator client {
+  provider      = "prisma-client-js"
+  // "native" for local dev; the debian target matches the Docker runtime (bookworm).
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  // Direct (non-pooled) connection used for migrations. On Supabase this is the
+  // session pooler (port 5432); the pooled transaction URL (6543) cannot run migrations.
+  directUrl = env("DIRECT_URL")
+}
+
+// ─────────────────────────────────────────────
+// Enums
+// ─────────────────────────────────────────────
+
+enum Role {
+  ADMIN
+  HR_MANAGER
+  FIRST_LEVEL_MANAGER
+  SECOND_LEVEL_MANAGER
+  EMPLOYEE
+}
+
+enum DepartmentLevel {
+  SECTOR // قطاع
+  DIVISION // إدارة
+  DEPARTMENT // قسم
+}
+
+enum CompetencyType {
+  LEADERSHIP // قيادية
+  TECHNICAL // تقنية
+  BEHAVIORAL // سلوكية
+  JOB // وظيفية
+  MANAGERIAL // إدارية
+}
+
+enum CompetencyLevel {
+  BASIC // أساسية
+  INTERMEDIATE // متوسطة
+  ADVANCED // متقدمة
+  EXPERT // خبير
+}
+
+enum ContractType {
+  FULL_TIME // دوام كامل
+  PART_TIME // دوام جزئي
+  CONTRACT // عقد
+  TEMPORARY // مؤقت
+}
+
+enum CareerStageLevel {
+  ENTRY // مبتدئ
+  MID // متوسط
+  SENIOR // خبير
+  LEAD // قيادي
+  EXEC // تنفيذي
+}
+
+enum EvaluationMode {
+  SHARED // الجدارات المشتركة فقط
+  SPECIFIC // الجدارات الوظيفية فقط
+  BOTH // كلاهما
+}
+
+enum EvaluationStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  REJECTED
+  ACKNOWLEDGED
+  OBJECTED
+}
+
+enum EvaluationItemKind {
+  COMPETENCY
+  KPI
+}
+
+// ─────────────────────────────────────────────
+// Auth & Users
+// ─────────────────────────────────────────────
+
+model User {
+  id             String    @id @default(cuid())
+  email          String    @unique
+  name           String
+  hashedPassword String?
+  role           Role      @default(EMPLOYEE)
+  isActive       Boolean   @default(true)
+  emailVerified  DateTime?
+  image          String?
+
+  // 1:1 link to the employee record this user represents (managers/employees).
+  employeeId String?   @unique
+  employee   Employee? @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+
+  accounts Account[]
+  sessions Session[]
+
+  auditLogs           AuditLog[]
+  evaluationsCreated  Evaluation[] @relation("EvaluationEvaluator")
+  evaluationsApproved Evaluation[] @relation("EvaluationApprover")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([role])
+  @@index([employeeId])
+}
+
+// Auth.js adapter models (kept for future OAuth; Credentials uses JWT sessions).
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ─────────────────────────────────────────────
+// Organization structure
+// ─────────────────────────────────────────────
+
+model Department {
+  id       String          @id @default(cuid())
+  name     String
+  level    DepartmentLevel
+  parentId String?
+  parent   Department?     @relation("DepartmentTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children Department[]    @relation("DepartmentTree")
+
+  jobs      Job[]
+  employees Employee[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([parentId])
+  @@index([level])
+}
+
+// ─────────────────────────────────────────────
+// Grades (الدرجات الوظيفية)
+// ─────────────────────────────────────────────
+
+model Grade {
+  id             String   @id @default(cuid())
+  num            String   @unique // "1".."15"
+  name           String
+  classification String?
+  leaveDays      Int      @default(21)
+  salaryMin      Decimal? @db.Decimal(12, 2)
+  salaryMax      Decimal? @db.Decimal(12, 2)
+  housing        String?
+  transport      String?
+  bonus          String?
+  benefits       String?
+
+  levels    GradeLevel[]
+  jobs      Job[]
+  employees Employee[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model GradeLevel {
+  id              String  @id @default(cuid())
+  gradeId         String
+  grade           Grade   @relation(fields: [gradeId], references: [id], onDelete: Cascade)
+  level           Int
+  label           String
+  minScore        Int     @default(85)
+  stayYears       Int     @default(0)
+  minYrsSecondary Int     @default(0)
+  minYrsDiploma   Int     @default(0)
+  minYrsBachelor  Int     @default(0)
+  minYrsMaster    Int     @default(0)
+  minYrsPhd       Int     @default(0)
+  competencies    String? @db.Text
+
+  @@unique([gradeId, level])
+  @@index([gradeId])
+}
+
+// ─────────────────────────────────────────────
+// Competencies (الجدارات)
+// ─────────────────────────────────────────────
+
+model Competency {
+  id          String          @id @default(cuid())
+  name        String          @unique
+  type        CompetencyType
+  level       CompetencyLevel @default(BASIC)
+  description String?         @db.Text
+  indicators  String?         @db.Text
+  // Shared competencies (behavioral/leadership/technical) used in every evaluation.
+  isShared    Boolean         @default(false)
+  // Stable key for shared competencies (e.g. b1, l3, t2) — null for job-specific.
+  sharedKey   String?         @unique
+
+  jobs JobCompetency[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([type])
+  @@index([isShared])
+}
+
+// ─────────────────────────────────────────────
+// Jobs (الوظائف)
+// ─────────────────────────────────────────────
+
+model Job {
+  id              String       @id @default(cuid())
+  name            String
+  description     String?      @db.Text
+  contractType    ContractType @default(FULL_TIME)
+  experienceLevel String?
+
+  departmentId String?
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  gradeId      String?
+  grade        Grade?      @relation(fields: [gradeId], references: [id], onDelete: SetNull)
+
+  // Line-manager position: the job this position reports to.
+  reportsToJobId  String?
+  reportsTo       Job?    @relation("JobHierarchy", fields: [reportsToJobId], references: [id], onDelete: SetNull)
+  subordinateJobs Job[]   @relation("JobHierarchy")
+
+  competencies JobCompetency[]
+  kpiSet       KpiSet?
+  employees    Employee[]
+  evaluations  Evaluation[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([departmentId])
+  @@index([gradeId])
+  @@index([reportsToJobId])
+  @@index([createdAt])
+}
+
+model JobCompetency {
+  id           String     @id @default(cuid())
+  jobId        String
+  job          Job        @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  competencyId String
+  competency   Competency @relation(fields: [competencyId], references: [id], onDelete: Cascade)
+
+  @@unique([jobId, competencyId])
+  @@index([jobId])
+  @@index([competencyId])
+}
+
+// ─────────────────────────────────────────────
+// Career paths (المسارات الوظيفية)
+// ─────────────────────────────────────────────
+
+model CareerPath {
+  id            String  @id @default(cuid())
+  name          String
+  field         String?
+  duration      String?
+  description   String? @db.Text
+  isAiGenerated Boolean @default(false)
+
+  stages CareerPathStage[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([createdAt])
+}
+
+model CareerPathStage {
+  id                   String           @id @default(cuid())
+  careerPathId         String
+  careerPath           CareerPath       @relation(fields: [careerPathId], references: [id], onDelete: Cascade)
+  order                Int
+  title                String
+  level                CareerStageLevel
+  gradeNum             String?
+  durationInRole       String?
+  description          String?          @db.Text
+  requiredCompetencies String[]
+  promotionCriteria    String[]
+
+  @@unique([careerPathId, order])
+  @@index([careerPathId])
+}
+
+// ─────────────────────────────────────────────
+// KPIs (مؤشرات الأداء)
+// ─────────────────────────────────────────────
+
+model KpiSet {
+  id            String  @id @default(cuid())
+  jobId         String  @unique
+  job           Job     @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  summary       String? @db.Text
+  isAiGenerated Boolean @default(false)
+
+  groups KpiGroup[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model KpiGroup {
+  id             String  @id @default(cuid())
+  kpiSetId       String
+  kpiSet         KpiSet  @relation(fields: [kpiSetId], references: [id], onDelete: Cascade)
+  competencyName String
+  compType       String?
+  order          Int     @default(0)
+
+  kpis Kpi[]
+
+  @@index([kpiSetId])
+}
+
+model Kpi {
+  id          String   @id @default(cuid())
+  kpiGroupId  String
+  kpiGroup    KpiGroup @relation(fields: [kpiGroupId], references: [id], onDelete: Cascade)
+  name        String
+  description String?  @db.Text
+  measure     String?
+  target      String?
+  frequency   String?
+  weight      String?
+  order       Int      @default(0)
+
+  @@index([kpiGroupId])
+}
+
+// ─────────────────────────────────────────────
+// Employees (الموظفون)
+// ─────────────────────────────────────────────
+
+model Employee {
+  id             String @id @default(cuid())
+  employeeNumber String @unique
+  name           String
+
+  jobId        String?
+  job          Job?        @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  departmentId String?
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  gradeId      String?
+  grade        Grade?      @relation(fields: [gradeId], references: [id], onDelete: SetNull)
+
+  // Reporting hierarchy: who this employee reports to.
+  managerId String?
+  manager   Employee?  @relation("EmployeeHierarchy", fields: [managerId], references: [id], onDelete: SetNull)
+  reports   Employee[] @relation("EmployeeHierarchy")
+
+  // Dynamic columns coming from Excel imports.
+  extraFields Json @default("{}")
+
+  user        User?
+  evaluations Evaluation[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([departmentId])
+  @@index([managerId])
+  @@index([jobId])
+}
+
+// ─────────────────────────────────────────────
+// Evaluations (التقييمات)
+// ─────────────────────────────────────────────
+
+model Evaluation {
+  id         String   @id @default(cuid())
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  jobId      String?
+  job        Job?     @relation(fields: [jobId], references: [id], onDelete: SetNull)
+
+  evaluatorId String
+  evaluator   User    @relation("EvaluationEvaluator", fields: [evaluatorId], references: [id])
+  approverId  String?
+  approver    User?   @relation("EvaluationApprover", fields: [approverId], references: [id])
+
+  period String
+  mode   EvaluationMode @default(BOTH)
+
+  kpiWeight        Int     @default(60)
+  competencyWeight Int     @default(40)
+  kpiScore         Float?
+  competencyScore  Float?
+  totalScore       Int?
+  ratingLabel      String?
+
+  status          EvaluationStatus @default(DRAFT)
+  approvedAt      DateTime?
+  rejectionReason String?          @db.Text
+  employeeAck     Boolean          @default(false)
+  objectionNote   String?          @db.Text
+
+  items EvaluationItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([employeeId])
+  @@index([evaluatorId])
+  @@index([approverId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model EvaluationItem {
+  id           String             @id @default(cuid())
+  evaluationId String
+  evaluation   Evaluation         @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
+  kind         EvaluationItemKind
+  refKey       String // b1/l3/t2, competency name, or KPI name
+  label        String
+  score        Float? // 1-5 for COMPETENCY, 0-100 for KPI
+  note         String?            @db.Text
+  // Employee objection on this specific item (score stays final).
+  objected      Boolean @default(false)
+  objectionNote String? @db.Text
+
+  @@index([evaluationId])
+}
+
+// ─────────────────────────────────────────────
+// Bell-curve distribution policy (منحنى الجرس)
+// ─────────────────────────────────────────────
+
+model BellCurvePolicy {
+  id           String  @id @default(cuid())
+  name         String
+  distribution Json // { above:[...], achieved:[...], below:[...] }
+  isActive     Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ─────────────────────────────────────────────
+// Audit log
+// ─────────────────────────────────────────────
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action     String
+  entityType String?
+  entityId   String?
+  metadata   Json?
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}

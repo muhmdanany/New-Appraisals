@@ -1,0 +1,13 @@
+{
+  "name": "orgchart-workspace",
+  "version": "0.0.0",
+  "private": true,
+  "license": "MIT",
+  "packageManager": "pnpm@10.26.1",
+  "scripts": {
+    "build": "pnpm -r --if-present run build"
+  },
+  "devDependencies": {
+    "typescript": "~5.9.2"
+  }
+}

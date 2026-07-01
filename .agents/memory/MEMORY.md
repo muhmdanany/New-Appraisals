@@ -1,0 +1,1 @@
+- [Competency Platform port](competency-platform-port.md) — Arabic/RTL HR app on Go+React; password-less X-User-Id identity, per-role scoping MUST be enforced server-side on every endpoint.

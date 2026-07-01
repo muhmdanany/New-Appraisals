@@ -1,0 +1,12 @@
+{
+  "name": "@workspace/api-server",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "go run ./cmd/server",
+    "build": "go build -o bin/server ./cmd/server",
+    "start": "./bin/server",
+    "seed": "go run ./cmd/seed",
+    "typecheck": "go vet ./..."
+  }
+}
