@@ -155,3 +155,27 @@ func (h *Handler) ImportEmployees(w http.ResponseWriter, r *http.Request) {
         h.audit(r, "employee.import", "Employee", nil)
         httpx.JSON(w, http.StatusOK, map[string]int{"imported": count})
 }
+
+// DeleteEmployee handles DELETE /employees/{id}. Restricted to ADMIN/HR_MANAGER.
+func (h *Handler) DeleteEmployee(w http.ResponseWriter, r *http.Request) {
+        u, ok := h.requireUser(w, r)
+        if !ok {
+                return
+        }
+        if !rbac.HasOrgWideAccess(u.Role) {
+                httpx.Error(w, http.StatusForbidden, "Forbidden")
+                return
+        }
+        id := chi.URLParam(r, "id")
+        deleted, err := h.Store.DeleteEmployee(r.Context(), id)
+        if err != nil {
+                writeDBErr(w, err)
+                return
+        }
+        if !deleted {
+                httpx.Error(w, http.StatusNotFound, "الموظف غير موجود")
+                return
+        }
+        h.audit(r, "employee.delete", "Employee", &id)
+        httpx.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}

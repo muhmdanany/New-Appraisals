@@ -8,7 +8,7 @@ import {
   useListGrades,
   getListEmployeesQueryKey,
 } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Pencil, Eye } from "lucide-react";
+import { Plus, Pencil, Eye, Trash2 } from "lucide-react";
 import { FormDialog, TextField, SelectField, useCanManage } from "@/components/form-fields";
 
 type Row = {
@@ -53,6 +53,15 @@ export default function Employees() {
   const canManage = useCanManage();
   const create = useCreateEmployee();
   const update = useUpdateEmployee();
+  const deleteMut = useMutation({
+    mutationFn: (id: string) =>
+      fetch(`/api/employees/${id}`, {
+        method: "DELETE",
+        headers: { "X-User-Id": localStorage.getItem("selectedUserId") ?? "" },
+      }).then((r) => { if (!r.ok) throw new Error("Delete failed"); }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: getListEmployeesQueryKey() }); toast({ title: "تم الحذف" }); },
+    onError: () => toast({ title: "فشل الحذف — قد يكون مرتبط بتقييمات", variant: "destructive" }),
+  });
 
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Row | null>(null);
@@ -151,6 +160,11 @@ export default function Employees() {
                         {canManage && (
                           <Button variant="ghost" size="icon" onClick={() => openEdit(emp as Row)}>
                             <Pencil className="w-4 h-4" />
+                          </Button>
+                        )}
+                        {canManage && (
+                          <Button variant="ghost" size="icon" onClick={() => { if (confirm("هل أنت متأكد من حذف هذا الموظف؟")) deleteMut.mutate(emp.id); }}>
+                            <Trash2 className="w-4 h-4 text-destructive" />
                           </Button>
                         )}
                       </div>

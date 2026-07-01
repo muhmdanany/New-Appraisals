@@ -5,6 +5,7 @@ import {
   getGetKpiSetQueryKey,
   useSaveKpiSet,
   useListJobs,
+  useGenerateKpis,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,7 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Pencil, Trash2 } from "lucide-react";
+import { Plus, Pencil, Trash2, Sparkles } from "lucide-react";
 import { FormDialog, TextAreaField, useCanManage } from "@/components/form-fields";
 
 const numOrUndef = (s: string) => (s.trim() === "" ? undefined : Number(s));
@@ -34,12 +35,26 @@ export default function JobKpis() {
   const { toast } = useToast();
   const canManage = useCanManage();
   const save = useSaveKpiSet();
+  const generate = useGenerateKpis();
 
   const jobName = jobs?.find((j) => j.id === jobId)?.name;
 
   const [open, setOpen] = useState(false);
   const [summary, setSummary] = useState("");
   const [groups, setGroups] = useState<GroupRow[]>([{ ...emptyGroup }]);
+
+  const handleGenerate = () => {
+    generate.mutate(
+      { jobId: jobId! },
+      {
+        onSuccess: () => {
+          toast({ title: "تم توليد مؤشرات الأداء بالذكاء الاصطناعي" });
+          qc.invalidateQueries({ queryKey: getGetKpiSetQueryKey(jobId!) });
+        },
+        onError: () => toast({ title: "فشل التوليد — تأكد من إعدادات AI", variant: "destructive" }),
+      },
+    );
+  };
 
   const openEditor = () => {
     setSummary(kpiSet?.summary ?? "");
@@ -112,10 +127,16 @@ export default function JobKpis() {
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold text-foreground">مؤشرات الأداء{jobName ? ` - ${jobName}` : ""}</h1>
         {canManage && (
-          <Button onClick={openEditor}>
-            <Pencil className="w-4 h-4 ml-2" />
-            {kpiSet?.groups?.length ? "تعديل المؤشرات" : "إضافة مؤشرات"}
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={handleGenerate} disabled={generate.isPending}>
+              <Sparkles className="w-4 h-4 ml-2" />
+              {generate.isPending ? "جاري التوليد..." : "توليد بالذكاء الاصطناعي"}
+            </Button>
+            <Button onClick={openEditor}>
+              <Pencil className="w-4 h-4 ml-2" />
+              {kpiSet?.groups?.length ? "تعديل المؤشرات" : "إضافة مؤشرات"}
+            </Button>
+          </div>
         )}
       </div>
       <Card>

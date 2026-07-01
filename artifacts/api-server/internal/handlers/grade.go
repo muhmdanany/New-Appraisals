@@ -3,7 +3,10 @@ package handlers
 import (
 	"net/http"
 
+	"github.com/go-chi/chi/v5"
+
 	"competency/internal/httpx"
+	"competency/internal/rbac"
 	"competency/internal/store"
 )
 
@@ -65,4 +68,28 @@ func (h *Handler) ImportGrades(w http.ResponseWriter, r *http.Request) {
 	}
 	h.audit(r, "grade.import", "Grade", nil)
 	httpx.JSON(w, http.StatusOK, map[string]int{"imported": count})
+}
+
+// DeleteGrade handles DELETE /grades/{id}. Restricted to ADMIN/HR_MANAGER.
+func (h *Handler) DeleteGrade(w http.ResponseWriter, r *http.Request) {
+	u, ok := h.requireUser(w, r)
+	if !ok {
+		return
+	}
+	if !rbac.HasOrgWideAccess(u.Role) {
+		httpx.Error(w, http.StatusForbidden, "Forbidden")
+		return
+	}
+	id := chi.URLParam(r, "id")
+	deleted, err := h.Store.DeleteGrade(r.Context(), id)
+	if err != nil {
+		writeDBErr(w, err)
+		return
+	}
+	if !deleted {
+		httpx.Error(w, http.StatusNotFound, "الدرجة غير موجودة")
+		return
+	}
+	h.audit(r, "grade.delete", "Grade", &id)
+	httpx.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }

@@ -7,6 +7,7 @@ import (
 
         "competency/internal/domain"
         "competency/internal/httpx"
+        "competency/internal/rbac"
         "competency/internal/store"
 )
 
@@ -135,4 +136,28 @@ func (h *Handler) ImportJobs(w http.ResponseWriter, r *http.Request) {
         }
         h.audit(r, "job.import", "Job", nil)
         httpx.JSON(w, http.StatusOK, map[string]int{"imported": count})
+}
+
+// DeleteJob handles DELETE /jobs/{id}. Restricted to ADMIN/HR_MANAGER.
+func (h *Handler) DeleteJob(w http.ResponseWriter, r *http.Request) {
+        u, ok := h.requireUser(w, r)
+        if !ok {
+                return
+        }
+        if !rbac.HasOrgWideAccess(u.Role) {
+                httpx.Error(w, http.StatusForbidden, "Forbidden")
+                return
+        }
+        id := chi.URLParam(r, "id")
+        deleted, err := h.Store.DeleteJob(r.Context(), id)
+        if err != nil {
+                writeDBErr(w, err)
+                return
+        }
+        if !deleted {
+                httpx.Error(w, http.StatusNotFound, "الوظيفة غير موجودة")
+                return
+        }
+        h.audit(r, "job.delete", "Job", &id)
+        httpx.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }

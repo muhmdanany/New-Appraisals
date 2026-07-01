@@ -106,6 +106,35 @@ ON CONFLICT ("employeeId") DO UPDATE SET name=EXCLUDED.name, email=EXCLUDED.emai
 
 // --- Settings ---
 
+// DeleteEmployee removes an employee by id. Returns false if not found.
+func (s *Store) DeleteEmployee(ctx context.Context, id string) (bool, error) {
+	// Unlink user first
+	s.pool.Exec(ctx, `UPDATE "User" SET "employeeId"=NULL, "updatedAt"=now() WHERE "employeeId"=$1`, id)
+	ct, err := s.pool.Exec(ctx, `DELETE FROM "Employee" WHERE id=$1`, id)
+	if err != nil {
+		return false, err
+	}
+	return ct.RowsAffected() > 0, nil
+}
+
+// DeleteJob removes a job by id. Returns false if not found.
+func (s *Store) DeleteJob(ctx context.Context, id string) (bool, error) {
+	ct, err := s.pool.Exec(ctx, `DELETE FROM "Job" WHERE id=$1`, id)
+	if err != nil {
+		return false, err
+	}
+	return ct.RowsAffected() > 0, nil
+}
+
+// DeleteGrade removes a grade by id. Returns false if not found.
+func (s *Store) DeleteGrade(ctx context.Context, id string) (bool, error) {
+	ct, err := s.pool.Exec(ctx, `DELETE FROM "Grade" WHERE id=$1`, id)
+	if err != nil {
+		return false, err
+	}
+	return ct.RowsAffected() > 0, nil
+}
+
 // GetSetting reads a JSON value from the Settings table.
 func (s *Store) GetSetting(ctx context.Context, key string) (json.RawMessage, error) {
 	var val json.RawMessage

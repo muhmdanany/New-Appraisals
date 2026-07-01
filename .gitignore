@@ -47,3 +47,11 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+
+# Go build artifacts
+artifacts/api-server/server.exe
+artifacts/api-server/server
+
+# Logs
+*.log
+api.log

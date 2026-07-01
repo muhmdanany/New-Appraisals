@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useListGrades, useCreateGrade, getListGradesQueryKey } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,15 @@ export default function Grades() {
   const { toast } = useToast();
   const canManage = useCanManage();
   const create = useCreateGrade();
+  const deleteMut = useMutation({
+    mutationFn: (id: string) =>
+      fetch(`/api/grades/${id}`, {
+        method: "DELETE",
+        headers: { "X-User-Id": localStorage.getItem("selectedUserId") ?? "" },
+      }).then((r) => { if (!r.ok) throw new Error("Delete failed"); }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: getListGradesQueryKey() }); toast({ title: "تم الحذف" }); },
+    onError: () => toast({ title: "فشل الحذف — قد تكون الدرجة مرتبطة بموظفين", variant: "destructive" }),
+  });
 
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ num: "", name: "", classification: "", leaveDays: "21" });
@@ -94,6 +103,7 @@ export default function Grades() {
                   <TableHead className="text-right">الدرجة</TableHead>
                   <TableHead className="text-right">الاسم</TableHead>
                   <TableHead className="text-right">التصنيف</TableHead>
+                  {canManage && <TableHead className="w-16">إجراءات</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -102,6 +112,13 @@ export default function Grades() {
                     <TableCell>{grade.num}</TableCell>
                     <TableCell>{grade.name}</TableCell>
                     <TableCell>{grade.classification}</TableCell>
+                    {canManage && (
+                      <TableCell>
+                        <Button variant="ghost" size="icon" onClick={() => { if (confirm("هل أنت متأكد من حذف هذه الدرجة؟")) deleteMut.mutate(grade.id); }}>
+                          <Trash2 className="w-4 h-4 text-destructive" />
+                        </Button>
+                      </TableCell>
+                    )}
                   </TableRow>
                 ))}
               </TableBody>

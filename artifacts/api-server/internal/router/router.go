@@ -63,6 +63,7 @@ func New(h *handlers.Handler) http.Handler {
                         // Grades.
                         r.Get("/grades", h.ListGrades)
                         r.With(admin).Post("/grades", h.CreateGrade)
+                        r.With(admin).Delete("/grades/{id}", h.DeleteGrade)
                         r.With(admin).Post("/grades/import", h.ImportGrades)
 
                         // Jobs.
@@ -71,12 +72,14 @@ func New(h *handlers.Handler) http.Handler {
                         r.Get("/jobs/{id}/profile", h.JobProfile)
                         r.With(admin).Post("/jobs", h.CreateJob)
                         r.With(admin).Put("/jobs/{id}", h.UpdateJob)
+                        r.With(admin).Delete("/jobs/{id}", h.DeleteJob)
                         r.With(admin).Post("/jobs/{id}/generate-description", h.GenerateJobDescription)
 
                         // Employees. (Handlers also self-enforce scope/role.)
                         r.Get("/employees", h.ListEmployees)
                         r.With(admin).Post("/employees", h.CreateEmployee)
                         r.With(admin).Put("/employees/{id}", h.UpdateEmployee)
+                        r.With(admin).Delete("/employees/{id}", h.DeleteEmployee)
                         r.With(admin).Post("/employees/import", h.ImportEmployees)
 
                         // KPIs.

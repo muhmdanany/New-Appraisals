@@ -8,13 +8,13 @@ import {
   useListCompetencies,
   getListJobsQueryKey,
 } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Pencil, FileText } from "lucide-react";
+import { Plus, Pencil, FileText, Trash2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -70,6 +70,15 @@ export default function Jobs() {
   const canManage = useCanManage();
   const create = useCreateJob();
   const update = useUpdateJob();
+  const deleteMut = useMutation({
+    mutationFn: (id: string) =>
+      fetch(`/api/jobs/${id}`, {
+        method: "DELETE",
+        headers: { "X-User-Id": localStorage.getItem("selectedUserId") ?? "" },
+      }).then((r) => { if (!r.ok) throw new Error("Delete failed"); }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: getListJobsQueryKey() }); toast({ title: "تم الحذف" }); },
+    onError: () => toast({ title: "فشل الحذف — قد تكون الوظيفة مرتبطة بموظفين", variant: "destructive" }),
+  });
 
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Row | null>(null);
@@ -167,6 +176,11 @@ export default function Jobs() {
                         {canManage && (
                           <Button variant="ghost" size="icon" onClick={() => openEdit(job as Row)}>
                             <Pencil className="w-4 h-4" />
+                          </Button>
+                        )}
+                        {canManage && (
+                          <Button variant="ghost" size="icon" onClick={() => { if (confirm("هل أنت متأكد من حذف هذه الوظيفة؟")) deleteMut.mutate(job.id); }}>
+                            <Trash2 className="w-4 h-4 text-destructive" />
                           </Button>
                         )}
                       </div>
