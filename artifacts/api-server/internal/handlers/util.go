@@ -66,3 +66,15 @@ func emptyToNil(v *string) *string {
         }
         return v
 }
+
+// clientIP extracts the best-effort client IP for audit logging.
+func clientIP(r *http.Request) *string {
+        if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+                ip := strings.TrimSpace(strings.Split(xff, ",")[0])
+                return &ip
+        }
+        if r.RemoteAddr != "" {
+                return &r.RemoteAddr
+        }
+        return nil
+}

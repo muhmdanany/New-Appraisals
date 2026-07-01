@@ -30,7 +30,11 @@ _Populate as you build — non-obvious choices a reader couldn't infer from the 
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+منصة الكفاءات — نظام موارد بشرية (عربي/RTL) لإدارة الوظائف، الجدارات، الدرجات،
+المسارات المهنية، الموظفين، مؤشرات الأداء، التقييمات، والتقارير.
+
+النظام **مفتوح بالكامل بلا تسجيل دخول**: لا يوجد login/session/roles، وكل
+المستخدمين لديهم صلاحية وصول كاملة لجميع الشاشات والإجراءات.
 
 ## User preferences
 

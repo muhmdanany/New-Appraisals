@@ -26,31 +26,6 @@ export interface EvaluationStatusResponse {
   status: string;
 }
 
-export interface LoginInput {
-  email: string;
-  password: string;
-}
-
-export interface EmployeeSummary {
-  id: string;
-  name: string;
-  employeeNumber: string;
-  /** @nullable */
-  departmentId?: string | null;
-  /** @nullable */
-  departmentName?: string | null;
-}
-
-export interface CurrentUser {
-  id: string;
-  email: string;
-  name: string;
-  role: string;
-  /** @nullable */
-  employeeId?: string | null;
-  employee?: EmployeeSummary | null;
-}
-
 export interface Department {
   id: string;
   name: string;

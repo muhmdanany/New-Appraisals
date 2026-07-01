@@ -3,13 +3,8 @@ import { Switch, Route, Router as WouterRouter } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { AuthProvider, useAuth } from "@/lib/auth-context";
+import { Layout } from "@/components/layout";
 import NotFound from "@/pages/not-found";
-import Login from "@/pages/login";
-
-const Layout = lazy(() =>
-  import("@/components/layout").then((m) => ({ default: m.Layout })),
-);
 
 const Dashboard = lazy(() => import("@/pages/dashboard"));
 const Jobs = lazy(() => import("@/pages/jobs"));
@@ -44,67 +39,23 @@ function PageLoader() {
   );
 }
 
-function ProtectedRoute({ component: Component, ...rest }: any) {
-  const { user, isLoading } = useAuth();
-
-  if (isLoading) return <PageLoader />;
-  if (!user) return <Login />;
-
-  return (
-    <Suspense fallback={<PageLoader />}>
-      <Layout>
-        <Component {...rest} />
-      </Layout>
-    </Suspense>
-  );
-}
-
 function Router() {
   return (
     <Switch>
-      <Route path="/login" component={Login} />
-      <Route path="/">
-        {(params) => <ProtectedRoute component={Dashboard} params={params} />}
-      </Route>
-      <Route path="/jobs">
-        {(params) => <ProtectedRoute component={Jobs} params={params} />}
-      </Route>
-      <Route path="/jobs/:id">
-        {(params) => <ProtectedRoute component={JobProfile} params={params} />}
-      </Route>
-      <Route path="/competencies">
-        {(params) => <ProtectedRoute component={Competencies} params={params} />}
-      </Route>
-      <Route path="/employees">
-        {(params) => <ProtectedRoute component={Employees} params={params} />}
-      </Route>
-      <Route path="/grades">
-        {(params) => <ProtectedRoute component={Grades} params={params} />}
-      </Route>
-      <Route path="/career-paths">
-        {(params) => <ProtectedRoute component={CareerPaths} params={params} />}
-      </Route>
-      <Route path="/kpis">
-        {(params) => <ProtectedRoute component={Kpis} params={params} />}
-      </Route>
-      <Route path="/kpis/:jobId">
-        {(params) => <ProtectedRoute component={JobKpis} params={params} />}
-      </Route>
-      <Route path="/evaluations">
-        {(params) => <ProtectedRoute component={Evaluations} params={params} />}
-      </Route>
-      <Route path="/evaluations/:id">
-        {(params) => <ProtectedRoute component={EvaluationDetail} params={params} />}
-      </Route>
-      <Route path="/reports">
-        {(params) => <ProtectedRoute component={Reports} params={params} />}
-      </Route>
-      <Route path="/bell-curve">
-        {(params) => <ProtectedRoute component={BellCurve} params={params} />}
-      </Route>
-      <Route path="/org-chart">
-        {(params) => <ProtectedRoute component={OrgChart} params={params} />}
-      </Route>
+      <Route path="/" component={Dashboard} />
+      <Route path="/jobs" component={Jobs} />
+      <Route path="/jobs/:id" component={JobProfile} />
+      <Route path="/competencies" component={Competencies} />
+      <Route path="/employees" component={Employees} />
+      <Route path="/grades" component={Grades} />
+      <Route path="/career-paths" component={CareerPaths} />
+      <Route path="/kpis" component={Kpis} />
+      <Route path="/kpis/:jobId" component={JobKpis} />
+      <Route path="/evaluations" component={Evaluations} />
+      <Route path="/evaluations/:id" component={EvaluationDetail} />
+      <Route path="/reports" component={Reports} />
+      <Route path="/bell-curve" component={BellCurve} />
+      <Route path="/org-chart" component={OrgChart} />
       <Route component={NotFound} />
     </Switch>
   );
@@ -113,14 +64,16 @@ function Router() {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <TooltipProvider>
-          <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-            <Router />
-          </WouterRouter>
-          <Toaster />
-        </TooltipProvider>
-      </AuthProvider>
+      <TooltipProvider>
+        <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+          <Suspense fallback={<PageLoader />}>
+            <Layout>
+              <Router />
+            </Layout>
+          </Suspense>
+        </WouterRouter>
+        <Toaster />
+      </TooltipProvider>
     </QueryClientProvider>
   );
 }

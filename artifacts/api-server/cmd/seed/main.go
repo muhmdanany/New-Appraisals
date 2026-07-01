@@ -11,7 +11,6 @@ import (
 
         "github.com/jackc/pgx/v4/pgxpool"
         "github.com/lucsky/cuid"
-        "golang.org/x/crypto/bcrypt"
 )
 
 type levelSeed struct {
@@ -192,12 +191,8 @@ func main() {
         staff := upsertEmployee("E-1002", "خالد الدوسري", "seed-dept-showrooms", gradeID("2"), &firstMgr)
         fmt.Println("  ✓ employee hierarchy")
 
-        // Demo users (one per role), shared dev password.
-        hash, err := bcrypt.GenerateFromPassword([]byte("Password123!"), 12)
-        if err != nil {
-                log.Fatalf("bcrypt: %v", err)
-        }
-        password := string(hash)
+        // Demo users (one per role). The system has no login, so these carry no
+        // password; they exist only to satisfy actor foreign keys on records.
         users := []struct {
                 email, name, role string
                 employeeID        *string
@@ -213,11 +208,11 @@ func main() {
                         INSERT INTO "User" (id, email, name, role, "hashedPassword", "employeeId", "isActive", "createdAt", "updatedAt")
                         VALUES ($1,$2,$3,$4,$5,$6,true, now(), now())
                         ON CONFLICT (email) DO UPDATE SET role=EXCLUDED.role, name=EXCLUDED.name, "employeeId"=EXCLUDED."employeeId", "updatedAt"=now()`,
-                        cuid.New(), u.email, u.name, u.role, password, u.employeeID); err != nil {
+                        cuid.New(), u.email, u.name, u.role, nil, u.employeeID); err != nil {
                         log.Fatalf("user %s: %v", u.email, err)
                 }
         }
-        fmt.Printf("  ✓ %d demo users (password: Password123!)\n", len(users))
+        fmt.Printf("  ✓ %d system users (no login)\n", len(users))
 
         // Sample career path.
         var cpExists string

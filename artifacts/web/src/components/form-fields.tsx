@@ -1,5 +1,4 @@
 import { ReactNode } from "react";
-import { useAuth } from "@/lib/auth-context";
 import {
   Dialog,
   DialogContent,
@@ -21,9 +20,9 @@ import {
 } from "@/components/ui/select";
 import { Loader2 } from "lucide-react";
 
-export function useCanManage(roles: string[] = ["ADMIN"]) {
-  const { user } = useAuth();
-  return !!user && roles.includes(user.role);
+// The system is open with no authentication, so everyone can manage everything.
+export function useCanManage(_roles: string[] = ["ADMIN"]) {
+  return true;
 }
 
 export function FormDialog({

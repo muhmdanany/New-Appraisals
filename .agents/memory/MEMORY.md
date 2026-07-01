@@ -1,1 +1,1 @@
-- [Competency Platform port](competency-platform-port.md) — Go(chi/pgx)+React HR app: no migration runner, RBAC gating must mirror backend, enum fields are dropdowns, OpenAPI is contract source of truth.
+- [Competency Platform port](competency-platform-port.md) — Go(chi/pgx)+React HR app: OPEN system (auth fully removed), no migration runner, enum fields are dropdowns, OpenAPI is contract source of truth, x/crypto needs GOPROXY=direct.

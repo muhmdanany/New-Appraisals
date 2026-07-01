@@ -16,57 +16,6 @@ export const HealthCheckResponse = zod.object({
 })
 
 
-/**
- * @summary Log in
- */
-export const LoginBody = zod.object({
-  "email": zod.string(),
-  "password": zod.string()
-})
-
-export const LoginResponse = zod.object({
-  "id": zod.string(),
-  "email": zod.string(),
-  "name": zod.string(),
-  "role": zod.string(),
-  "employeeId": zod.string().nullish(),
-  "employee": zod.union([zod.object({
-  "id": zod.string(),
-  "name": zod.string(),
-  "employeeNumber": zod.string(),
-  "departmentId": zod.string().nullish(),
-  "departmentName": zod.string().nullish()
-}),zod.null()]).optional()
-})
-
-
-/**
- * @summary Log out
- */
-export const LogoutResponse = zod.object({
-  "ok": zod.boolean()
-})
-
-
-/**
- * @summary Current user
- */
-export const GetMeResponse = zod.object({
-  "id": zod.string(),
-  "email": zod.string(),
-  "name": zod.string(),
-  "role": zod.string(),
-  "employeeId": zod.string().nullish(),
-  "employee": zod.union([zod.object({
-  "id": zod.string(),
-  "name": zod.string(),
-  "employeeNumber": zod.string(),
-  "departmentId": zod.string().nullish(),
-  "departmentName": zod.string().nullish()
-}),zod.null()]).optional()
-})
-
-
 export const ListDepartmentsResponseItem = zod.object({
   "id": zod.string(),
   "name": zod.string(),

@@ -1,60 +1,37 @@
 import { ReactNode } from "react";
 import { Link, useLocation } from "wouter";
-import { useAuth } from "@/lib/auth-context";
-import { useLogout, getGetMeQueryKey } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
-import { 
-  LayoutDashboard, 
-  Briefcase, 
-  Award, 
-  GraduationCap, 
-  Map, 
-  Users, 
-  Target, 
-  ClipboardCheck, 
-  FileBarChart, 
-  PieChart, 
+import {
+  LayoutDashboard,
+  Briefcase,
+  Award,
+  GraduationCap,
+  Map,
+  Users,
+  Target,
+  ClipboardCheck,
+  FileBarChart,
+  PieChart,
   Network,
-  LogOut,
   Menu
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-const ALL_ROLES = ["ADMIN", "HR_MANAGER", "FIRST_LEVEL_MANAGER", "SECOND_LEVEL_MANAGER", "EMPLOYEE"];
-const GENERAL_READ = ["ADMIN", "HR_MANAGER"];
-const HR_READ = ["ADMIN", "HR_MANAGER", "FIRST_LEVEL_MANAGER", "SECOND_LEVEL_MANAGER"];
-
 const NAV_ITEMS = [
-  { href: "/", label: "لوحة القيادة", icon: LayoutDashboard, roles: GENERAL_READ },
-  { href: "/jobs", label: "الوظائف", icon: Briefcase, roles: GENERAL_READ },
-  { href: "/competencies", label: "الجدارات", icon: Award, roles: GENERAL_READ },
-  { href: "/grades", label: "الدرجات الوظيفية", icon: GraduationCap, roles: GENERAL_READ },
-  { href: "/career-paths", label: "المسارات المهنية", icon: Map, roles: GENERAL_READ },
-  { href: "/employees", label: "الموظفين", icon: Users, roles: HR_READ },
-  { href: "/kpis", label: "مؤشرات الأداء", icon: Target, roles: ["ADMIN"] },
-  { href: "/evaluations", label: "التقييمات", icon: ClipboardCheck, roles: ALL_ROLES },
-  { href: "/reports", label: "التقارير", icon: FileBarChart, roles: GENERAL_READ },
-  { href: "/bell-curve", label: "التوزيع الطبيعي", icon: PieChart, roles: GENERAL_READ },
-  { href: "/org-chart", label: "الهيكل التنظيمي", icon: Network, roles: HR_READ },
+  { href: "/", label: "لوحة القيادة", icon: LayoutDashboard },
+  { href: "/jobs", label: "الوظائف", icon: Briefcase },
+  { href: "/competencies", label: "الجدارات", icon: Award },
+  { href: "/grades", label: "الدرجات الوظيفية", icon: GraduationCap },
+  { href: "/career-paths", label: "المسارات المهنية", icon: Map },
+  { href: "/employees", label: "الموظفين", icon: Users },
+  { href: "/kpis", label: "مؤشرات الأداء", icon: Target },
+  { href: "/evaluations", label: "التقييمات", icon: ClipboardCheck },
+  { href: "/reports", label: "التقارير", icon: FileBarChart },
+  { href: "/bell-curve", label: "التوزيع الطبيعي", icon: PieChart },
+  { href: "/org-chart", label: "الهيكل التنظيمي", icon: Network },
 ];
 
 export function Layout({ children }: { children: ReactNode }) {
-  const { user } = useAuth();
   const [location] = useLocation();
-  const logout = useLogout();
-  const queryClient = useQueryClient();
-
-  const handleLogout = () => {
-    logout.mutate(undefined, {
-      onSuccess: () => {
-        queryClient.setQueryData(getGetMeQueryKey(), null);
-      }
-    });
-  };
-
-  const visibleNavItems = NAV_ITEMS.filter(item => 
-    !user || item.roles.includes(user.role)
-  );
 
   return (
     <div className="min-h-screen flex bg-background text-foreground">
@@ -66,9 +43,9 @@ export function Layout({ children }: { children: ReactNode }) {
             منصة الكفاءات
           </h1>
         </div>
-        
+
         <nav className="flex-1 overflow-y-auto p-4 space-y-1">
-          {visibleNavItems.map((item) => {
+          {NAV_ITEMS.map((item) => {
             const isActive = location === item.href || (item.href !== "/" && location.startsWith(item.href));
             return (
               <Link key={item.href} href={item.href}>
@@ -80,22 +57,6 @@ export function Layout({ children }: { children: ReactNode }) {
             );
           })}
         </nav>
-
-        <div className="p-4 border-t border-border">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold">
-              {user?.name.charAt(0)}
-            </div>
-            <div className="flex-1 overflow-hidden">
-              <p className="text-sm font-semibold truncate">{user?.name}</p>
-              <p className="text-xs text-muted-foreground truncate">{user?.role}</p>
-            </div>
-          </div>
-          <Button variant="outline" className="w-full justify-start text-destructive hover:text-destructive hover:bg-destructive/10" onClick={handleLogout}>
-            <LogOut className="w-4 h-4 ml-2" />
-            تسجيل الخروج
-          </Button>
-        </div>
       </aside>
 
       {/* Main Content */}

@@ -10,7 +10,6 @@ import {
   useObjectEvaluation,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useAuth } from "@/lib/auth-context";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -33,7 +32,6 @@ const STATUS_LABELS: Record<string, string> = {
 
 export default function EvaluationDetail() {
   const { id } = useParams();
-  const { user } = useAuth();
   const qc = useQueryClient();
   const { toast } = useToast();
   const { data: evaluation, isLoading } = useGetEvaluation(id!, {
@@ -59,10 +57,9 @@ export default function EvaluationDetail() {
   };
   const err = () => toast({ title: "تعذّر تنفيذ الإجراء", variant: "destructive" });
 
-  const role = user?.role;
   const status = evaluation?.status;
-  const isManager = ["ADMIN", "FIRST_LEVEL_MANAGER"].includes(role ?? "");
-  const isApprover = ["ADMIN", "SECOND_LEVEL_MANAGER"].includes(role ?? "");
+  const isManager = true;
+  const isApprover = true;
 
   const doReject = () => {
     if (!reason.trim()) {
