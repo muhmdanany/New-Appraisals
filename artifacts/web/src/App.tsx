@@ -4,6 +4,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Layout } from "@/components/layout";
+import { IdentityProvider, useIdentity } from "@/lib/identity";
+import SelectUser from "@/pages/select-user";
 import NotFound from "@/pages/not-found";
 
 const Dashboard = lazy(() => import("@/pages/dashboard"));
@@ -61,19 +63,34 @@ function Router() {
   );
 }
 
+function IdentityGate() {
+  const { userId, user, users, isLoading } = useIdentity();
+
+  // No identity chosen yet, or a stored id that no longer matches any user.
+  if (!userId || (!isLoading && users.length > 0 && !user)) {
+    return <SelectUser />;
+  }
+
+  return (
+    <Suspense fallback={<PageLoader />}>
+      <Layout>
+        <Router />
+      </Layout>
+    </Suspense>
+  );
+}
+
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-          <Suspense fallback={<PageLoader />}>
-            <Layout>
-              <Router />
-            </Layout>
-          </Suspense>
-        </WouterRouter>
-        <Toaster />
-      </TooltipProvider>
+      <IdentityProvider>
+        <TooltipProvider>
+          <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+            <IdentityGate />
+          </WouterRouter>
+          <Toaster />
+        </TooltipProvider>
+      </IdentityProvider>
     </QueryClientProvider>
   );
 }

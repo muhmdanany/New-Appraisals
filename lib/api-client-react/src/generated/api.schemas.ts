@@ -5,6 +5,29 @@
  * Competency Platform REST API
  * OpenAPI spec version: 0.1.0
  */
+export type UserRole = typeof UserRole[keyof typeof UserRole];
+
+
+export const UserRole = {
+  ADMIN: 'ADMIN',
+  HR_MANAGER: 'HR_MANAGER',
+  FIRST_LEVEL_MANAGER: 'FIRST_LEVEL_MANAGER',
+  SECOND_LEVEL_MANAGER: 'SECOND_LEVEL_MANAGER',
+  EMPLOYEE: 'EMPLOYEE',
+} as const;
+
+export interface User {
+  id: string;
+  email: string;
+  name: string;
+  role: UserRole;
+  isActive: boolean;
+  /** @nullable */
+  employeeId?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface HealthStatus {
   status: string;
 }

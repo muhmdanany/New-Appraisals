@@ -19,10 +19,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Loader2 } from "lucide-react";
+import { useIdentity } from "@/lib/identity";
 
-// The system is open with no authentication, so everyone can manage everything.
-export function useCanManage(_roles: string[] = ["ADMIN"]) {
-  return true;
+// Management actions are gated by the selected identity's role.
+export function useCanManage(roles: string[] = ["ADMIN"]) {
+  const { user } = useIdentity();
+  return !!user && roles.includes(user.role);
 }
 
 export function FormDialog({

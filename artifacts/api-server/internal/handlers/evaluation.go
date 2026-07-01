@@ -1,39 +1,107 @@
 package handlers
 
 import (
-        "errors"
+        "context"
         "net/http"
 
         "github.com/go-chi/chi/v5"
 
         "competency/internal/domain"
         "competency/internal/httpx"
+        "competency/internal/rbac"
         "competency/internal/store"
 )
 
-// systemActor resolves the user id used as the actor for records that require a
-// User foreign key. On an empty User table it responds with a clear error
-// instead of letting a foreign-key violation surface later.
-func (h *Handler) systemActor(w http.ResponseWriter, r *http.Request) (string, bool) {
-        actor, err := h.Store.SystemUserID(r.Context())
-        if err != nil {
-                if errors.Is(err, store.ErrNoSystemUser) {
-                        httpx.Error(w, http.StatusServiceUnavailable, "لا يوجد مستخدم في النظام لتسجيل الإجراء. شغّل أمر التهيئة (seed) أولاً.")
-                        return "", false
-                }
-                httpx.WriteErr(w, err)
-                return "", false
+// visibleScope resolves a user's employee-visibility scope.
+// orgWide=true means no restriction (ADMIN/HR_MANAGER).
+func (h *Handler) visibleScope(ctx context.Context, u *domain.User) (ids map[string]bool, orgWide bool, err error) {
+        if u.Role == domain.RoleAdmin || u.Role == domain.RoleHRManager {
+                return nil, true, nil
         }
-        return actor, true
+        if u.EmployeeID == nil {
+                return map[string]bool{}, false, nil
+        }
+        ids, err = h.Store.VisibleEmployeeIDs(ctx, *u.EmployeeID)
+        return ids, false, err
 }
 
-// ListEvaluations handles GET /evaluations. The system is open, so all
-// evaluations are listed (optionally filtered by status).
+func keysOfBoolMap(m map[string]bool) []string {
+        out := make([]string, 0, len(m))
+        for k := range m {
+                out = append(out, k)
+        }
+        return out
+}
+
+func (h *Handler) canView(ctx context.Context, u *domain.User, ev *store.EvalCore) (bool, error) {
+        switch u.Role {
+        case domain.RoleAdmin, domain.RoleHRManager:
+                return true, nil
+        case domain.RoleFirstLevel:
+                return ev.EvaluatorID == u.ID, nil
+        case domain.RoleSecondLevel:
+                ids, orgWide, err := h.visibleScope(ctx, u)
+                if err != nil {
+                        return false, err
+                }
+                inScope := orgWide || ids[ev.EmployeeID]
+                return inScope && ev.Status != "DRAFT", nil
+        case domain.RoleEmployee:
+                visible := ev.Status == "APPROVED" || ev.Status == "ACKNOWLEDGED" || ev.Status == "OBJECTED"
+                return u.EmployeeID != nil && ev.EmployeeID == *u.EmployeeID && visible, nil
+        }
+        return false, nil
+}
+
+func (h *Handler) canApprove(ctx context.Context, u *domain.User, ev *store.EvalCore) (bool, error) {
+        if u.Role == domain.RoleAdmin {
+                return true, nil
+        }
+        if u.Role != domain.RoleSecondLevel {
+                return false, nil
+        }
+        ids, orgWide, err := h.visibleScope(ctx, u)
+        if err != nil {
+                return false, err
+        }
+        return orgWide || ids[ev.EmployeeID], nil
+}
+
+// ListEvaluations handles GET /evaluations, scoped by the acting user's role.
 func (h *Handler) ListEvaluations(w http.ResponseWriter, r *http.Request) {
+        u, ok := h.requireUser(w, r)
+        if !ok {
+                return
+        }
         f := store.EvalListFilter{}
         if status := qStr(r, "status"); status != "" {
                 f.Status = &status
         }
+
+        switch u.Role {
+        case domain.RoleAdmin, domain.RoleHRManager:
+                // no restriction
+        case domain.RoleFirstLevel:
+                f.EvaluatorID = &u.ID
+        case domain.RoleSecondLevel:
+                ids, _, err := h.visibleScope(r.Context(), u)
+                if err != nil {
+                        httpx.WriteErr(w, err)
+                        return
+                }
+                f.RestrictEmployees = true
+                f.EmployeeIDs = keysOfBoolMap(ids)
+                f.ExcludeStatuses = []string{"DRAFT"}
+        case domain.RoleEmployee:
+                f.RestrictEmployees = true
+                if u.EmployeeID != nil {
+                        f.EmployeeIDs = []string{*u.EmployeeID}
+                } else {
+                        f.EmployeeIDs = []string{"__none__"}
+                }
+                f.Statuses = []string{"APPROVED", "ACKNOWLEDGED", "OBJECTED"}
+        }
+
         items, err := h.Store.ListEvaluations(r.Context(), f)
         if err != nil {
                 httpx.WriteErr(w, err)
@@ -44,6 +112,10 @@ func (h *Handler) ListEvaluations(w http.ResponseWriter, r *http.Request) {
 
 // GetEvaluation handles GET /evaluations/{id}.
 func (h *Handler) GetEvaluation(w http.ResponseWriter, r *http.Request) {
+        u, ok := h.requireUser(w, r)
+        if !ok {
+                return
+        }
         id := chi.URLParam(r, "id")
         ev, err := h.Store.EvaluationByID(r.Context(), id)
         if err != nil {
@@ -52,6 +124,15 @@ func (h *Handler) GetEvaluation(w http.ResponseWriter, r *http.Request) {
         }
         if ev == nil {
                 httpx.Error(w, http.StatusNotFound, "Evaluation not found")
+                return
+        }
+        allowed, err := h.canView(r.Context(), u, &store.EvalCore{EmployeeID: ev.EmployeeID, EvaluatorID: ev.EvaluatorID, Status: ev.Status})
+        if err != nil {
+                httpx.WriteErr(w, err)
+                return
+        }
+        if !allowed {
+                httpx.Error(w, http.StatusForbidden, "Forbidden")
                 return
         }
         httpx.JSON(w, http.StatusOK, ev)
@@ -89,6 +170,14 @@ type createEvaluationRequest struct {
 
 // CreateEvaluation handles POST /evaluations.
 func (h *Handler) CreateEvaluation(w http.ResponseWriter, r *http.Request) {
+        u, ok := h.requireUser(w, r)
+        if !ok {
+                return
+        }
+        if !rbac.In(rbac.Evaluators, u.Role) {
+                httpx.Error(w, http.StatusForbidden, "Forbidden")
+                return
+        }
         var req createEvaluationRequest
         if err := httpx.Decode(r, &req); err != nil {
                 httpx.WriteErr(w, err)
@@ -109,6 +198,18 @@ func (h *Handler) CreateEvaluation(w http.ResponseWriter, r *http.Request) {
                 req.Kpis = []store.EvalKpiInput{}
         }
 
+        if u.Role == domain.RoleFirstLevel {
+                ids, orgWide, err := h.visibleScope(r.Context(), u)
+                if err != nil {
+                        httpx.WriteErr(w, err)
+                        return
+                }
+                if !orgWide && !ids[req.EmployeeID] {
+                        httpx.Error(w, http.StatusForbidden, "Forbidden")
+                        return
+                }
+        }
+
         emp, err := h.Store.EmployeeByID(r.Context(), req.EmployeeID)
         if err != nil {
                 httpx.WriteErr(w, err)
@@ -119,12 +220,7 @@ func (h *Handler) CreateEvaluation(w http.ResponseWriter, r *http.Request) {
                 return
         }
 
-        actor, ok := h.systemActor(w, r)
-        if !ok {
-                return
-        }
-
-        id, err := h.Store.CreateEvaluation(r.Context(), actor, req.EmployeeID, emp.JobID, req.EvaluationSave)
+        id, err := h.Store.CreateEvaluation(r.Context(), u.ID, req.EmployeeID, emp.JobID, req.EvaluationSave)
         if err != nil {
                 httpx.WriteErr(w, err)
                 return
@@ -135,6 +231,10 @@ func (h *Handler) CreateEvaluation(w http.ResponseWriter, r *http.Request) {
 
 // UpdateEvaluation handles PUT /evaluations/{id}.
 func (h *Handler) UpdateEvaluation(w http.ResponseWriter, r *http.Request) {
+        u, ok := h.requireUser(w, r)
+        if !ok {
+                return
+        }
         id := chi.URLParam(r, "id")
         in, ok := h.decodeSave(w, r)
         if !ok {
@@ -147,6 +247,10 @@ func (h *Handler) UpdateEvaluation(w http.ResponseWriter, r *http.Request) {
         }
         if ev == nil {
                 httpx.Error(w, http.StatusNotFound, "Evaluation not found")
+                return
+        }
+        if u.Role != domain.RoleAdmin && ev.EvaluatorID != u.ID {
+                httpx.Error(w, http.StatusForbidden, "Forbidden")
                 return
         }
         if ev.Status != "DRAFT" && ev.Status != "REJECTED" {
@@ -163,6 +267,10 @@ func (h *Handler) UpdateEvaluation(w http.ResponseWriter, r *http.Request) {
 
 // SubmitEvaluation handles POST /evaluations/{id}/submit.
 func (h *Handler) SubmitEvaluation(w http.ResponseWriter, r *http.Request) {
+        u, ok := h.requireUser(w, r)
+        if !ok {
+                return
+        }
         id := chi.URLParam(r, "id")
         ev, err := h.Store.EvaluationCore(r.Context(), id)
         if err != nil {
@@ -171,6 +279,10 @@ func (h *Handler) SubmitEvaluation(w http.ResponseWriter, r *http.Request) {
         }
         if ev == nil {
                 httpx.Error(w, http.StatusNotFound, "Evaluation not found")
+                return
+        }
+        if u.Role != domain.RoleAdmin && ev.EvaluatorID != u.ID {
+                httpx.Error(w, http.StatusForbidden, "Forbidden")
                 return
         }
         if ev.Status != "DRAFT" && ev.Status != "REJECTED" {
@@ -191,6 +303,10 @@ func (h *Handler) SubmitEvaluation(w http.ResponseWriter, r *http.Request) {
 
 // ApproveEvaluation handles POST /evaluations/{id}/approve.
 func (h *Handler) ApproveEvaluation(w http.ResponseWriter, r *http.Request) {
+        u, ok := h.requireUser(w, r)
+        if !ok {
+                return
+        }
         id := chi.URLParam(r, "id")
         ev, err := h.Store.EvaluationCore(r.Context(), id)
         if err != nil {
@@ -201,15 +317,20 @@ func (h *Handler) ApproveEvaluation(w http.ResponseWriter, r *http.Request) {
                 httpx.Error(w, http.StatusNotFound, "Evaluation not found")
                 return
         }
+        allowed, err := h.canApprove(r.Context(), u, ev)
+        if err != nil {
+                httpx.WriteErr(w, err)
+                return
+        }
+        if !allowed {
+                httpx.Error(w, http.StatusForbidden, "Forbidden")
+                return
+        }
         if ev.Status != "SUBMITTED" {
                 httpx.Error(w, http.StatusBadRequest, "التقييم ليس قيد الاعتماد.")
                 return
         }
-        actor, ok := h.systemActor(w, r)
-        if !ok {
-                return
-        }
-        if err := h.Store.ApproveEvaluation(r.Context(), id, actor); err != nil {
+        if err := h.Store.ApproveEvaluation(r.Context(), id, u.ID); err != nil {
                 httpx.WriteErr(w, err)
                 return
         }
@@ -223,6 +344,10 @@ type rejectRequest struct {
 
 // RejectEvaluation handles POST /evaluations/{id}/reject.
 func (h *Handler) RejectEvaluation(w http.ResponseWriter, r *http.Request) {
+        u, ok := h.requireUser(w, r)
+        if !ok {
+                return
+        }
         id := chi.URLParam(r, "id")
         var req rejectRequest
         if err := httpx.Decode(r, &req); err != nil {
@@ -241,15 +366,20 @@ func (h *Handler) RejectEvaluation(w http.ResponseWriter, r *http.Request) {
                 httpx.Error(w, http.StatusNotFound, "Evaluation not found")
                 return
         }
+        allowed, err := h.canApprove(r.Context(), u, ev)
+        if err != nil {
+                httpx.WriteErr(w, err)
+                return
+        }
+        if !allowed {
+                httpx.Error(w, http.StatusForbidden, "Forbidden")
+                return
+        }
         if ev.Status != "SUBMITTED" {
                 httpx.Error(w, http.StatusBadRequest, "التقييم ليس قيد الاعتماد.")
                 return
         }
-        actor, ok := h.systemActor(w, r)
-        if !ok {
-                return
-        }
-        if err := h.Store.RejectEvaluation(r.Context(), id, actor, req.Reason); err != nil {
+        if err := h.Store.RejectEvaluation(r.Context(), id, u.ID, req.Reason); err != nil {
                 httpx.WriteErr(w, err)
                 return
         }
@@ -257,8 +387,13 @@ func (h *Handler) RejectEvaluation(w http.ResponseWriter, r *http.Request) {
         httpx.JSON(w, http.StatusOK, map[string]string{"id": id, "status": "REJECTED"})
 }
 
-// AcknowledgeEvaluation handles POST /evaluations/{id}/acknowledge.
+// AcknowledgeEvaluation handles POST /evaluations/{id}/acknowledge — only the
+// evaluated employee may acknowledge (يوافق) their own approved evaluation.
 func (h *Handler) AcknowledgeEvaluation(w http.ResponseWriter, r *http.Request) {
+        u, ok := h.requireUser(w, r)
+        if !ok {
+                return
+        }
         id := chi.URLParam(r, "id")
         ev, err := h.Store.EvaluationCore(r.Context(), id)
         if err != nil {
@@ -267,6 +402,10 @@ func (h *Handler) AcknowledgeEvaluation(w http.ResponseWriter, r *http.Request) 
         }
         if ev == nil {
                 httpx.Error(w, http.StatusNotFound, "Evaluation not found")
+                return
+        }
+        if u.EmployeeID == nil || ev.EmployeeID != *u.EmployeeID {
+                httpx.Error(w, http.StatusForbidden, "Forbidden")
                 return
         }
         if ev.Status != "APPROVED" {
@@ -285,8 +424,13 @@ type objectRequest struct {
         Items []store.ObjectionItem `json:"items"`
 }
 
-// ObjectEvaluation handles POST /evaluations/{id}/object.
+// ObjectEvaluation handles POST /evaluations/{id}/object — only the evaluated
+// employee may object (يرفض/يكتب ملاحظة) to their own approved evaluation.
 func (h *Handler) ObjectEvaluation(w http.ResponseWriter, r *http.Request) {
+        u, ok := h.requireUser(w, r)
+        if !ok {
+                return
+        }
         id := chi.URLParam(r, "id")
         var req objectRequest
         if err := httpx.Decode(r, &req); err != nil {
@@ -304,6 +448,10 @@ func (h *Handler) ObjectEvaluation(w http.ResponseWriter, r *http.Request) {
         }
         if ev == nil {
                 httpx.Error(w, http.StatusNotFound, "Evaluation not found")
+                return
+        }
+        if u.EmployeeID == nil || ev.EmployeeID != *u.EmployeeID {
+                httpx.Error(w, http.StatusForbidden, "Forbidden")
                 return
         }
         if ev.Status != "APPROVED" {
@@ -335,9 +483,28 @@ func (h *Handler) ObjectEvaluation(w http.ResponseWriter, r *http.Request) {
 
 // EvaluationFormData handles GET /evaluations/form-data.
 func (h *Handler) EvaluationFormData(w http.ResponseWriter, r *http.Request) {
+        u, ok := h.requireUser(w, r)
+        if !ok {
+                return
+        }
+        if !rbac.In(rbac.Evaluators, u.Role) {
+                httpx.Error(w, http.StatusForbidden, "Forbidden")
+                return
+        }
         employeeID := qStr(r, "employeeId")
         if !required(w, employeeID, "employeeId") {
                 return
+        }
+        if u.Role == domain.RoleFirstLevel {
+                ids, orgWide, err := h.visibleScope(r.Context(), u)
+                if err != nil {
+                        httpx.WriteErr(w, err)
+                        return
+                }
+                if !orgWide && !ids[employeeID] {
+                        httpx.Error(w, http.StatusForbidden, "Forbidden")
+                        return
+                }
         }
         data, err := h.Store.EvaluationFormData(r.Context(), employeeID)
         if err != nil {
@@ -352,11 +519,32 @@ func (h *Handler) EvaluationFormData(w http.ResponseWriter, r *http.Request) {
 }
 
 // DepartmentDistribution handles GET /evaluations/department-distribution.
+// Used when building/viewing an evaluation, so it is limited to evaluators and
+// scoped to the acting first-level manager's subtree.
 func (h *Handler) DepartmentDistribution(w http.ResponseWriter, r *http.Request) {
+        u, ok := h.requireUser(w, r)
+        if !ok {
+                return
+        }
+        if !rbac.In(rbac.Evaluators, u.Role) {
+                httpx.Error(w, http.StatusForbidden, "Forbidden")
+                return
+        }
         employeeID := qStr(r, "employeeId")
         period := qStr(r, "period")
         if !required(w, employeeID, "employeeId") || !required(w, period, "period") {
                 return
+        }
+        if u.Role == domain.RoleFirstLevel {
+                ids, orgWide, err := h.visibleScope(r.Context(), u)
+                if err != nil {
+                        httpx.WriteErr(w, err)
+                        return
+                }
+                if !orgWide && !ids[employeeID] {
+                        httpx.Error(w, http.StatusForbidden, "Forbidden")
+                        return
+                }
         }
         var exclude *string
         if e := qStr(r, "excludeEvaluationId"); e != "" {

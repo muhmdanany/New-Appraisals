@@ -19,6 +19,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 import { FormDialog } from "@/components/form-fields";
+import { useIdentity } from "@/lib/identity";
 import { CheckCircle, XCircle, Send, ThumbsUp, AlertTriangle } from "lucide-react";
 
 const STATUS_LABELS: Record<string, string> = {
@@ -57,9 +58,17 @@ export default function EvaluationDetail() {
   };
   const err = () => toast({ title: "تعذّر تنفيذ الإجراء", variant: "destructive" });
 
+  const { user } = useIdentity();
+  const role = user?.role;
   const status = evaluation?.status;
-  const isManager = true;
-  const isApprover = true;
+
+  // Submitting for approval: admin or the direct (first-level) manager.
+  const canSubmit = role === "ADMIN" || role === "FIRST_LEVEL_MANAGER";
+  // Approving/rejecting: admin or the higher (second-level) manager.
+  const isApprover = role === "ADMIN" || role === "SECOND_LEVEL_MANAGER";
+  // Acknowledge/object: only the evaluated employee themselves.
+  const isSelfEmployee =
+    !!user?.employeeId && evaluation?.employeeId === user.employeeId;
 
   const doReject = () => {
     if (!reason.trim()) {
@@ -107,7 +116,7 @@ export default function EvaluationDetail() {
         <h1 className="text-3xl font-bold text-foreground">تفاصيل التقييم</h1>
         {!isLoading && evaluation && (
           <div className="flex gap-2">
-            {status === "DRAFT" && isManager && (
+            {status === "DRAFT" && canSubmit && (
               <Button onClick={() => submit.mutate({ id: id! }, { onSuccess: ok("تم إرسال التقييم للاعتماد"), onError: err })} disabled={submit.isPending}>
                 <Send className="w-4 h-4 ml-2" />
                 إرسال للاعتماد
@@ -125,7 +134,7 @@ export default function EvaluationDetail() {
                 </Button>
               </>
             )}
-            {status === "APPROVED" && (
+            {status === "APPROVED" && isSelfEmployee && (
               <>
                 <Button onClick={() => acknowledge.mutate({ id: id! }, { onSuccess: ok("تم تأكيد الاطلاع"), onError: err })} disabled={acknowledge.isPending}>
                   <ThumbsUp className="w-4 h-4 ml-2" />

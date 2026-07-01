@@ -79,3 +79,5 @@ export * from './policySet';
 export * from './ratingDistributionItem';
 export * from './rejectInput';
 export * from './reportEvaluationRow';
+export * from './user';
+export * from './userRole';

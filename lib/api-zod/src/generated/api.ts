@@ -9,6 +9,22 @@ import * as zod from 'zod';
 
 
 /**
+ * @summary قائمة المستخدمين المتاحين لاختيار الهوية
+ */
+export const ListUsersResponseItem = zod.object({
+  "id": zod.string(),
+  "email": zod.string(),
+  "name": zod.string(),
+  "role": zod.enum(['ADMIN', 'HR_MANAGER', 'FIRST_LEVEL_MANAGER', 'SECOND_LEVEL_MANAGER', 'EMPLOYEE']),
+  "isActive": zod.boolean(),
+  "employeeId": zod.string().nullish(),
+  "createdAt": zod.coerce.date().optional(),
+  "updatedAt": zod.coerce.date().optional()
+})
+export const ListUsersResponse = zod.array(ListUsersResponseItem)
+
+
+/**
  * @summary Health check
  */
 export const HealthCheckResponse = zod.object({

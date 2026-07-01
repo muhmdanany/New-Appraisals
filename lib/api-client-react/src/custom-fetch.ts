@@ -15,8 +15,11 @@ const DEFAULT_JSON_ACCEPT = "application/json, application/problem+json";
 // Module-level configuration
 // ---------------------------------------------------------------------------
 
+export type UserIdGetter = () => string | null;
+
 let _baseUrl: string | null = null;
 let _authTokenGetter: AuthTokenGetter | null = null;
+let _userIdGetter: UserIdGetter | null = null;
 
 /**
  * Set a base URL that is prepended to every relative request URL
@@ -42,6 +45,16 @@ export function setBaseUrl(url: string | null): void {
  */
 export function setAuthTokenGetter(getter: AuthTokenGetter | null): void {
   _authTokenGetter = getter;
+}
+
+/**
+ * Register a getter that supplies the selected identity's user id. When it
+ * returns a non-empty string, an `X-User-Id` header is attached to every
+ * request. This app has no passwords: the client picks an identity and the
+ * server scopes data by the supplied user id. Pass `null` to clear.
+ */
+export function setUserIdGetter(getter: UserIdGetter | null): void {
+  _userIdGetter = getter;
 }
 
 function isRequest(input: RequestInfo | URL): input is Request {
@@ -355,6 +368,14 @@ export async function customFetch<T = unknown>(
     const token = await _authTokenGetter();
     if (token) {
       headers.set("authorization", `Bearer ${token}`);
+    }
+  }
+
+  // Attach the selected identity so the server can scope data by role.
+  if (_userIdGetter && !headers.has("x-user-id")) {
+    const userId = _userIdGetter();
+    if (userId) {
+      headers.set("x-user-id", userId);
     }
   }
 

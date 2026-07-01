@@ -20,6 +20,21 @@ tags:
   - name: evaluations
   - name: reports
 paths:
+  /users:
+    get:
+      operationId: listUsers
+      tags: [users]
+      summary: قائمة المستخدمين المتاحين لاختيار الهوية
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/User"
+
   /healthz:
     get:
       operationId: healthCheck
@@ -704,6 +719,20 @@ paths:
 
 components:
   schemas:
+    User:
+      type: object
+      required: [id, email, name, role, isActive]
+      properties:
+        id: { type: string }
+        email: { type: string }
+        name: { type: string }
+        role:
+          type: string
+          enum: [ADMIN, HR_MANAGER, FIRST_LEVEL_MANAGER, SECOND_LEVEL_MANAGER, EMPLOYEE]
+        isActive: { type: boolean }
+        employeeId: { type: ["string", "null"] }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
     HealthStatus:
       type: object
       properties:
