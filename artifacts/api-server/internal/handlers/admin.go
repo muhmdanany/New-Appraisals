@@ -251,3 +251,86 @@ func (h *Handler) SaveEvaluationSettings(w http.ResponseWriter, r *http.Request)
 	h.audit(r, "settings.evaluation.update", "Settings", nil)
 	httpx.JSON(w, http.StatusOK, s)
 }
+
+// ---------- Field Options ----------
+
+const fieldOptionsKey = "field_options"
+
+type fieldOption struct {
+	Value  string `json:"value"`
+	Label  string `json:"label"`
+	Active bool   `json:"active"`
+}
+
+type fieldOptionsPayload struct {
+	CompetencyTypes  []fieldOption `json:"competencyTypes"`
+	CompetencyLevels []fieldOption `json:"competencyLevels"`
+}
+
+var defaultFieldOptions = fieldOptionsPayload{
+	CompetencyTypes: []fieldOption{
+		{Value: "BEHAVIORAL", Label: "سلوكية", Active: true},
+		{Value: "LEADERSHIP", Label: "قيادية", Active: true},
+		{Value: "TECHNICAL", Label: "فنية", Active: true},
+	},
+	CompetencyLevels: []fieldOption{
+		{Value: "BASIC", Label: "أساسي", Active: true},
+		{Value: "INTERMEDIATE", Label: "متوسط", Active: true},
+		{Value: "ADVANCED", Label: "متقدم", Active: true},
+		{Value: "EXPERT", Label: "خبير", Active: true},
+	},
+}
+
+// GetFieldOptions handles GET /api/settings/field-options.
+func (h *Handler) GetFieldOptions(w http.ResponseWriter, r *http.Request) {
+	val, err := h.Store.GetSetting(r.Context(), fieldOptionsKey)
+	if err != nil {
+		httpx.JSON(w, http.StatusOK, defaultFieldOptions)
+		return
+	}
+	var s fieldOptionsPayload
+	if err := json.Unmarshal(val, &s); err != nil {
+		httpx.JSON(w, http.StatusOK, defaultFieldOptions)
+		return
+	}
+	httpx.JSON(w, http.StatusOK, s)
+}
+
+// SaveFieldOptions handles PUT /api/settings/field-options.
+func (h *Handler) SaveFieldOptions(w http.ResponseWriter, r *http.Request) {
+	var s fieldOptionsPayload
+	if err := httpx.Decode(r, &s); err != nil {
+		httpx.WriteErr(w, err)
+		return
+	}
+	val, _ := json.Marshal(s)
+	if err := h.Store.SaveSetting(r.Context(), fieldOptionsKey, val); err != nil {
+		httpx.WriteErr(w, err)
+		return
+	}
+	h.audit(r, "settings.field_options.update", "Settings", nil)
+	httpx.JSON(w, http.StatusOK, s)
+}
+
+// ---------- Permissions ----------
+
+// GetPermissions handles GET /api/settings/permissions.
+func (h *Handler) GetPermissions(w http.ResponseWriter, r *http.Request) {
+	httpx.JSON(w, http.StatusOK, h.Perms())
+}
+
+// SavePermissions handles PUT /api/settings/permissions.
+func (h *Handler) SavePermissions(w http.ResponseWriter, r *http.Request) {
+	var m rbac.PermissionMatrix
+	if err := httpx.Decode(r, &m); err != nil {
+		httpx.WriteErr(w, err)
+		return
+	}
+	if err := rbac.SavePermissions(r.Context(), h.Store, m); err != nil {
+		httpx.WriteErr(w, err)
+		return
+	}
+	h.ReloadPerms()
+	h.audit(r, "settings.permissions.update", "Settings", nil)
+	httpx.JSON(w, http.StatusOK, h.Perms())
+}

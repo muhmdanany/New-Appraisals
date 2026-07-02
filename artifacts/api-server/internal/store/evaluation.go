@@ -213,13 +213,15 @@ type EvalCore struct {
 	EvaluatorID string
 	Status      string
 	TotalScore  *int
+	Period      string
+	RatingLabel *string
 }
 
 // EvaluationCore fetches the workflow-relevant fields.
 func (s *Store) EvaluationCore(ctx context.Context, id string) (*EvalCore, error) {
 	var c EvalCore
-	row := s.pool.QueryRow(ctx, `SELECT id, "employeeId", "evaluatorId", status, "totalScore" FROM "Evaluation" WHERE id=$1`, id)
-	if err := row.Scan(&c.ID, &c.EmployeeID, &c.EvaluatorID, &c.Status, &c.TotalScore); err != nil {
+	row := s.pool.QueryRow(ctx, `SELECT id, "employeeId", "evaluatorId", status, "totalScore", period, "ratingLabel" FROM "Evaluation" WHERE id=$1`, id)
+	if err := row.Scan(&c.ID, &c.EmployeeID, &c.EvaluatorID, &c.Status, &c.TotalScore, &c.Period, &c.RatingLabel); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
 		}
@@ -428,6 +430,30 @@ func (s *Store) EvaluationByID(ctx context.Context, id string) (*domain.Evaluati
 		e.Items = append(e.Items, it)
 	}
 	return &e, rows.Err()
+}
+
+// DeleteEvaluation removes an evaluation and its items. Only DRAFT evaluations can be deleted.
+func (s *Store) DeleteEvaluation(ctx context.Context, id string) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	// Only allow deleting drafts
+	var status string
+	if err := tx.QueryRow(ctx, `SELECT status FROM "Evaluation" WHERE id=$1`, id).Scan(&status); err != nil {
+		return err
+	}
+	if status != "DRAFT" {
+		return errors.New("only draft evaluations can be deleted")
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM "EvaluationItem" WHERE "evaluationId"=$1`, id); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM "Evaluation" WHERE id=$1`, id); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 // DepartmentDistribution is the running rating distribution for an employee's

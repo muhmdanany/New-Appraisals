@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useParams } from "wouter";
+import { useTranslation } from "@/lib/i18n";
 import {
   useGetKpiSet,
   getGetKpiSetQueryKey,
@@ -26,6 +27,7 @@ const emptyKpi: KpiRow = { name: "", description: "", target: "", measure: "", f
 const emptyGroup: GroupRow = { competencyName: "", compType: "", kpis: [{ ...emptyKpi }] };
 
 export default function JobKpis() {
+  const { t } = useTranslation();
   const { jobId } = useParams();
   const { data: kpiSet, isLoading } = useGetKpiSet(jobId!, {
     query: { enabled: !!jobId, queryKey: getGetKpiSetQueryKey(jobId!) },
@@ -48,10 +50,10 @@ export default function JobKpis() {
       { jobId: jobId! },
       {
         onSuccess: () => {
-          toast({ title: "تم توليد مؤشرات الأداء بالذكاء الاصطناعي" });
+          toast({ title: t("kpis.aiGenerated") });
           qc.invalidateQueries({ queryKey: getGetKpiSetQueryKey(jobId!) });
         },
-        onError: () => toast({ title: "فشل التوليد — تأكد من إعدادات AI", variant: "destructive" }),
+        onError: () => toast({ title: t("kpis.aiFailed"), variant: "destructive" }),
       },
     );
   };
@@ -106,18 +108,18 @@ export default function JobKpis() {
           })),
       }));
     if (cleanGroups.length === 0) {
-      toast({ title: "أضف مجموعة واحدة على الأقل", variant: "destructive" });
+      toast({ title: t("kpis.addGroupFirst"), variant: "destructive" });
       return;
     }
     save.mutate(
       { jobId: jobId!, data: { summary: summary || undefined, groups: cleanGroups } },
       {
         onSuccess: () => {
-          toast({ title: "تم حفظ المؤشرات" });
+          toast({ title: t("kpis.saved") });
           setOpen(false);
           qc.invalidateQueries({ queryKey: getGetKpiSetQueryKey(jobId!) });
         },
-        onError: () => toast({ title: "حدث خطأ", variant: "destructive" }),
+        onError: () => toast({ title: t("common.genericError"), variant: "destructive" }),
       },
     );
   };
@@ -125,29 +127,29 @@ export default function JobKpis() {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold text-foreground">مؤشرات الأداء{jobName ? ` - ${jobName}` : ""}</h1>
+        <h1 className="text-3xl font-bold text-foreground">{t("kpis.title")}{jobName ? ` - ${jobName}` : ""}</h1>
         {canManage && (
           <div className="flex gap-2">
             <Button variant="outline" onClick={handleGenerate} disabled={generate.isPending}>
               <Sparkles className="w-4 h-4 ml-2" />
-              {generate.isPending ? "جاري التوليد..." : "توليد بالذكاء الاصطناعي"}
+              {generate.isPending ? t("kpis.generating") : t("common.aiGenerate")}
             </Button>
             <Button onClick={openEditor}>
               <Pencil className="w-4 h-4 ml-2" />
-              {kpiSet?.groups?.length ? "تعديل المؤشرات" : "إضافة مؤشرات"}
+              {kpiSet?.groups?.length ? t("kpis.editKpis") : t("kpis.addKpis")}
             </Button>
           </div>
         )}
       </div>
       <Card>
         <CardHeader>
-          <CardTitle>المؤشرات</CardTitle>
+          <CardTitle>{t("kpis.indicators")}</CardTitle>
         </CardHeader>
         <CardContent>
           {isLoading ? (
             <Skeleton className="h-64 w-full" />
           ) : !kpiSet?.groups?.length ? (
-            <p className="text-muted-foreground">لا توجد مؤشرات لهذه الوظيفة بعد.</p>
+            <p className="text-muted-foreground">{t("kpis.noKpisYet")}</p>
           ) : (
             <div className="space-y-8">
               {kpiSet.groups.map((group) => (
@@ -156,10 +158,10 @@ export default function JobKpis() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead className="text-right">المؤشر</TableHead>
-                        <TableHead className="text-right">الوصف</TableHead>
-                        <TableHead className="text-right">المستهدف</TableHead>
-                        <TableHead className="text-right">الوزن</TableHead>
+                        <TableHead className="text-right">{t("kpis.indicator")}</TableHead>
+                        <TableHead className="text-right">{t("common.description")}</TableHead>
+                        <TableHead className="text-right">{t("kpis.target")}</TableHead>
+                        <TableHead className="text-right">{t("kpis.weight")}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -183,28 +185,28 @@ export default function JobKpis() {
       <FormDialog
         open={open}
         onOpenChange={setOpen}
-        title="تحرير مؤشرات الأداء"
+        title={t("kpis.editTitle")}
         onSubmit={submit}
         submitting={save.isPending}
         wide
       >
-        <TextAreaField label="ملخص" value={summary} onChange={setSummary} rows={2} />
+        <TextAreaField label={t("kpis.summary")} value={summary} onChange={setSummary} rows={2} />
         <div className="space-y-3">
           <div className="flex items-center justify-between">
-            <Label>المجموعات</Label>
+            <Label>{t("kpis.groups")}</Label>
             <Button type="button" variant="outline" size="sm" onClick={() => setGroups([...groups, { ...emptyGroup, kpis: [{ ...emptyKpi }] }])}>
-              <Plus className="w-4 h-4 ml-1" /> مجموعة
+              <Plus className="w-4 h-4 ml-1" /> {t("kpis.group")}
             </Button>
           </div>
           {groups.map((g, gi) => (
             <div key={gi} className="rounded-md border border-border p-3 space-y-3">
               <div className="flex items-center gap-2">
                 <div className="flex-1 space-y-1">
-                  <Label className="text-xs">اسم الجدارة / المجموعة</Label>
+                  <Label className="text-xs">{t("kpis.groupName")}</Label>
                   <Input value={g.competencyName} onChange={(e) => setGroup(gi, { competencyName: e.target.value })} />
                 </div>
                 <div className="w-40 space-y-1">
-                  <Label className="text-xs">النوع</Label>
+                  <Label className="text-xs">{t("kpis.kpiType")}</Label>
                   <Input value={g.compType} onChange={(e) => setGroup(gi, { compType: e.target.value })} />
                 </div>
                 {groups.length > 1 && (
@@ -217,19 +219,19 @@ export default function JobKpis() {
                 {g.kpis.map((k, ki) => (
                   <div key={ki} className="grid grid-cols-12 gap-2 items-end">
                     <div className="col-span-4 space-y-1">
-                      <Label className="text-xs">المؤشر</Label>
+                      <Label className="text-xs">{t("kpis.kpiName")}</Label>
                       <Input value={k.name} onChange={(e) => setKpi(gi, ki, { name: e.target.value })} />
                     </div>
                     <div className="col-span-3 space-y-1">
-                      <Label className="text-xs">المستهدف</Label>
+                      <Label className="text-xs">{t("kpis.kpiTarget")}</Label>
                       <Input value={k.target} onChange={(e) => setKpi(gi, ki, { target: e.target.value })} />
                     </div>
                     <div className="col-span-2 space-y-1">
-                      <Label className="text-xs">التكرار</Label>
+                      <Label className="text-xs">{t("kpis.frequency")}</Label>
                       <Input value={k.frequency} onChange={(e) => setKpi(gi, ki, { frequency: e.target.value })} />
                     </div>
                     <div className="col-span-2 space-y-1">
-                      <Label className="text-xs">الوزن %</Label>
+                      <Label className="text-xs">{t("kpis.weightPercent")}</Label>
                       <Input type="number" value={k.weight} onChange={(e) => setKpi(gi, ki, { weight: e.target.value })} />
                     </div>
                     <div className="col-span-1">
@@ -242,7 +244,7 @@ export default function JobKpis() {
                   </div>
                 ))}
                 <Button type="button" variant="ghost" size="sm" onClick={() => setGroup(gi, { kpis: [...g.kpis, { ...emptyKpi }] })}>
-                  <Plus className="w-4 h-4 ml-1" /> مؤشر
+                  <Plus className="w-4 h-4 ml-1" /> {t("kpis.addIndicator")}
                 </Button>
               </div>
             </div>

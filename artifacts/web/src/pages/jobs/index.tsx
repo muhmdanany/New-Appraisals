@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "@/lib/i18n";
 import {
   useListJobs,
   useCreateJob,
@@ -42,12 +43,7 @@ type Row = {
   competencyIds?: string[] | null;
 };
 
-const CONTRACT_TYPES = [
-  { value: "FULL_TIME", label: "دوام كامل" },
-  { value: "PART_TIME", label: "دوام جزئي" },
-  { value: "CONTRACT", label: "عقد" },
-  { value: "TEMPORARY", label: "مؤقت" },
-];
+const CONTRACT_TYPE_KEYS = ["FULL_TIME", "PART_TIME", "CONTRACT", "TEMPORARY"] as const;
 
 const empty = {
   name: "",
@@ -61,6 +57,8 @@ const empty = {
 };
 
 export default function Jobs() {
+  const { t } = useTranslation();
+  const CONTRACT_TYPES = CONTRACT_TYPE_KEYS.map((k) => ({ value: k, label: t(`jobs.contractTypes.${k}`) }));
   const { data: jobs, isLoading } = useListJobs();
   const { data: departments } = useListDepartments();
   const { data: grades } = useListGrades();
@@ -76,8 +74,8 @@ export default function Jobs() {
         method: "DELETE",
         headers: { "X-User-Id": localStorage.getItem("selectedUserId") ?? "" },
       }).then((r) => { if (!r.ok) throw new Error("Delete failed"); }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: getListJobsQueryKey() }); toast({ title: "تم الحذف" }); },
-    onError: () => toast({ title: "فشل الحذف — قد تكون الوظيفة مرتبطة بموظفين", variant: "destructive" }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: getListJobsQueryKey() }); toast({ title: t("jobs.deleted") }); },
+    onError: () => toast({ title: t("jobs.deleteFailed"), variant: "destructive" }),
   });
 
   const [open, setOpen] = useState(false);
@@ -107,7 +105,7 @@ export default function Jobs() {
 
   const submit = () => {
     if (!form.name.trim()) {
-      toast({ title: "المسمى الوظيفي مطلوب", variant: "destructive" });
+      toast({ title: t("jobs.titleRequired"), variant: "destructive" });
       return;
     }
     const data = {
@@ -121,11 +119,11 @@ export default function Jobs() {
       competencyIds: form.competencyIds,
     };
     const onSuccess = () => {
-      toast({ title: editing ? "تم تحديث الوظيفة" : "تمت إضافة الوظيفة" });
+      toast({ title: editing ? t("jobs.updated") : t("jobs.created") });
       setOpen(false);
       qc.invalidateQueries({ queryKey: getListJobsQueryKey() });
     };
-    const onError = () => toast({ title: "حدث خطأ", variant: "destructive" });
+    const onError = () => toast({ title: t("common.genericError"), variant: "destructive" });
     if (editing) update.mutate({ id: editing.id, data }, { onSuccess, onError });
     else create.mutate({ data }, { onSuccess, onError });
   };
@@ -133,17 +131,17 @@ export default function Jobs() {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold text-foreground">الوظائف</h1>
+        <h1 className="text-3xl font-bold text-foreground">{t("jobs.title")}</h1>
         {canManage && (
           <Button onClick={openCreate}>
             <Plus className="w-4 h-4 ml-2" />
-            إضافة وظيفة
+            {t("jobs.addJob")}
           </Button>
         )}
       </div>
       <Card>
         <CardHeader>
-          <CardTitle>قائمة الوظائف</CardTitle>
+          <CardTitle>{t("jobs.jobList")}</CardTitle>
         </CardHeader>
         <CardContent>
           {isLoading ? (
@@ -152,11 +150,11 @@ export default function Jobs() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="text-right">المسمى الوظيفي</TableHead>
-                  <TableHead className="text-right">الإدارة</TableHead>
-                  <TableHead className="text-right">الدرجة</TableHead>
-                  <TableHead className="text-right">نوع العقد</TableHead>
-                  <TableHead className="text-right">إجراءات</TableHead>
+                  <TableHead className="text-right">{t("jobs.jobTitle")}</TableHead>
+                  <TableHead className="text-right">{t("jobs.department")}</TableHead>
+                  <TableHead className="text-right">{t("jobs.grade")}</TableHead>
+                  <TableHead className="text-right">{t("jobs.contractType")}</TableHead>
+                  <TableHead className="text-right">{t("common.actions")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -170,7 +168,7 @@ export default function Jobs() {
                     </TableCell>
                     <TableCell>
                       <div className="flex gap-1">
-                        <Button variant="ghost" size="icon" title="ملف الوظيفة" onClick={() => setProfileJob(job as Row)}>
+                        <Button variant="ghost" size="icon" title={t("jobs.jobProfile")} onClick={() => setProfileJob(job as Row)}>
                           <FileText className="w-4 h-4" />
                         </Button>
                         {canManage && (
@@ -179,7 +177,7 @@ export default function Jobs() {
                           </Button>
                         )}
                         {canManage && (
-                          <Button variant="ghost" size="icon" onClick={() => { if (confirm("هل أنت متأكد من حذف هذه الوظيفة؟")) deleteMut.mutate(job.id); }}>
+                          <Button variant="ghost" size="icon" onClick={() => { if (confirm(t("jobs.confirmDelete"))) deleteMut.mutate(job.id); }}>
                             <Trash2 className="w-4 h-4 text-destructive" />
                           </Button>
                         )}
@@ -196,40 +194,40 @@ export default function Jobs() {
       <FormDialog
         open={open}
         onOpenChange={setOpen}
-        title={editing ? "تعديل وظيفة" : "إضافة وظيفة"}
+        title={editing ? t("jobs.editJob") : t("jobs.addJob")}
         onSubmit={submit}
         submitting={create.isPending || update.isPending}
         wide
       >
         <div className="grid grid-cols-2 gap-4">
-          <TextField label="المسمى الوظيفي" value={form.name} onChange={(v) => setForm({ ...form, name: v })} required />
+          <TextField label={t("jobs.jobTitle")} value={form.name} onChange={(v) => setForm({ ...form, name: v })} required />
           <SelectField
-            label="نوع العقد"
+            label={t("jobs.contractType")}
             value={form.contractType}
             onChange={(v) => setForm({ ...form, contractType: v })}
             options={CONTRACT_TYPES}
           />
           <SelectField
-            label="الإدارة"
+            label={t("jobs.department")}
             value={form.departmentId}
             onChange={(v) => setForm({ ...form, departmentId: v })}
             options={(departments ?? []).map((d) => ({ value: d.id, label: d.name }))}
             allowEmpty
           />
           <SelectField
-            label="الدرجة"
+            label={t("jobs.grade")}
             value={form.gradeId}
             onChange={(v) => setForm({ ...form, gradeId: v })}
             options={(grades ?? []).map((g) => ({ value: g.id, label: `${g.num} - ${g.name}` }))}
             allowEmpty
           />
           <TextField
-            label="مستوى الخبرة"
+            label={t("jobs.expLevel")}
             value={form.experienceLevel}
             onChange={(v) => setForm({ ...form, experienceLevel: v })}
           />
           <SelectField
-            label="يرفع تقاريره إلى"
+            label={t("jobs.reportsTo")}
             value={form.reportsToJobId}
             onChange={(v) => setForm({ ...form, reportsToJobId: v })}
             options={(jobs ?? []).filter((j) => j.id !== editing?.id).map((j) => ({ value: j.id, label: j.name }))}
@@ -237,12 +235,12 @@ export default function Jobs() {
           />
         </div>
         <TextAreaField
-          label="الوصف"
+          label={t("jobs.description")}
           value={form.description}
           onChange={(v) => setForm({ ...form, description: v })}
         />
         <MultiSelectField
-          label="الجدارات المرتبطة"
+          label={t("jobs.linkedCompetencies")}
           values={form.competencyIds}
           onChange={(v) => setForm({ ...form, competencyIds: v })}
           options={(competencies ?? []).map((c) => ({ value: c.id, label: c.name }))}
@@ -254,9 +252,9 @@ export default function Jobs() {
         <DialogContent className="max-w-lg print:max-w-full print:shadow-none">
           <DialogHeader>
             <DialogTitle className="flex items-center justify-between">
-              <span>ملف الوظيفة</span>
+              <span>{t("jobs.jobProfile")}</span>
               <Button variant="outline" size="sm" onClick={() => window.print()} className="print:hidden">
-                طباعة / حفظ PDF
+                {t("common.printPDF")}
               </Button>
             </DialogTitle>
           </DialogHeader>
@@ -272,20 +270,20 @@ export default function Jobs() {
                   {dept && <div className="text-xs text-white/70">{dept.name}</div>}
                 </div>
                 <div className="grid grid-cols-2 gap-3">
-                  <div><span className="text-muted-foreground">الدرجة:</span> {grade ? `${grade.num} - ${grade.name}` : "—"}</div>
-                  <div><span className="text-muted-foreground">نوع العقد:</span> {CONTRACT_TYPES.find((c) => c.value === profileJob.contractType)?.label ?? "—"}</div>
-                  <div><span className="text-muted-foreground">مستوى الخبرة:</span> {profileJob.experienceLevel ?? "—"}</div>
-                  <div><span className="text-muted-foreground">يرفع تقاريره إلى:</span> {reportsTo?.name ?? "—"}</div>
+                  <div><span className="text-muted-foreground">{t("jobs.grade")}:</span> {grade ? `${grade.num} - ${grade.name}` : "—"}</div>
+                  <div><span className="text-muted-foreground">{t("jobs.contractType")}:</span> {CONTRACT_TYPES.find((c) => c.value === profileJob.contractType)?.label ?? "—"}</div>
+                  <div><span className="text-muted-foreground">{t("jobs.expLevel")}:</span> {profileJob.experienceLevel ?? "—"}</div>
+                  <div><span className="text-muted-foreground">{t("jobs.reportsTo")}:</span> {reportsTo?.name ?? "—"}</div>
                 </div>
                 {profileJob.description && (
                   <div>
-                    <div className="font-bold mb-1">الوصف الوظيفي</div>
+                    <div className="font-bold mb-1">{t("jobs.jobDescription")}</div>
                     <p className="text-muted-foreground whitespace-pre-wrap">{profileJob.description}</p>
                   </div>
                 )}
                 {jobComps.length > 0 && (
                   <div>
-                    <div className="font-bold mb-1">الجدارات المطلوبة</div>
+                    <div className="font-bold mb-1">{t("jobs.requiredCompetencies")}</div>
                     <ul className="list-disc list-inside text-muted-foreground">
                       {jobComps.map((c) => <li key={c.id}>{c.name}</li>)}
                     </ul>

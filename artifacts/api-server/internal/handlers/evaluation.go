@@ -8,6 +8,7 @@ import (
 
         "competency/internal/domain"
         "competency/internal/httpx"
+        "competency/internal/notifier"
         "competency/internal/rbac"
         "competency/internal/store"
 )
@@ -226,6 +227,17 @@ func (h *Handler) CreateEvaluation(w http.ResponseWriter, r *http.Request) {
                 return
         }
         h.audit(r, "evaluation.create", "Evaluation", &id)
+
+        // Auto-notify employee about new evaluation.
+        go func() {
+                cfg, _ := h.Notifier.LoadConfig(r.Context())
+                if cfg != nil && cfg.AutoNewEval {
+                        h.Notifier.Send(r.Context(), notifier.BuildPayload(
+                                domain.NotifNewEvaluation, req.EmployeeID, emp.Name, id, req.Period, nil, nil,
+                        ))
+                }
+        }()
+
         httpx.JSON(w, http.StatusCreated, map[string]string{"id": id})
 }
 
@@ -335,6 +347,17 @@ func (h *Handler) ApproveEvaluation(w http.ResponseWriter, r *http.Request) {
                 return
         }
         h.audit(r, "evaluation.approve", "Evaluation", &id)
+
+        // Auto-notify employee about approval.
+        go func() {
+                cfg, _ := h.Notifier.LoadConfig(r.Context())
+                if cfg != nil && cfg.AutoApproved {
+                        h.Notifier.Send(r.Context(), notifier.BuildPayload(
+                                domain.NotifApproved, ev.EmployeeID, "", id, ev.Period, ev.TotalScore, ev.RatingLabel,
+                        ))
+                }
+        }()
+
         httpx.JSON(w, http.StatusOK, map[string]string{"id": id, "status": "APPROVED"})
 }
 
@@ -479,6 +502,34 @@ func (h *Handler) ObjectEvaluation(w http.ResponseWriter, r *http.Request) {
         }
         h.audit(r, "evaluation.object", "Evaluation", &id)
         httpx.JSON(w, http.StatusOK, map[string]string{"id": id, "status": "OBJECTED"})
+}
+
+// DeleteEvaluation handles DELETE /evaluations/{id}. Only drafts can be deleted.
+func (h *Handler) DeleteEvaluation(w http.ResponseWriter, r *http.Request) {
+        u, ok := h.requireUser(w, r)
+        if !ok {
+                return
+        }
+        id := chi.URLParam(r, "id")
+        ev, err := h.Store.EvaluationCore(r.Context(), id)
+        if err != nil {
+                httpx.WriteErr(w, err)
+                return
+        }
+        if ev == nil {
+                httpx.Error(w, http.StatusNotFound, "التقييم غير موجود")
+                return
+        }
+        if ev.EvaluatorID != u.ID && !rbac.HasOrgWideAccess(u.Role) {
+                httpx.Error(w, http.StatusForbidden, "Forbidden")
+                return
+        }
+        if err := h.Store.DeleteEvaluation(r.Context(), id); err != nil {
+                httpx.WriteErr(w, err)
+                return
+        }
+        h.audit(r, "evaluation.delete", "Evaluation", &id)
+        httpx.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
 // EvaluationFormData handles GET /evaluations/form-data.

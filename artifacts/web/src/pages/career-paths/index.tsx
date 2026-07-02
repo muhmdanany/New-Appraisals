@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "@/lib/i18n";
 import {
   useListCareerPaths,
   useCreateCareerPath,
@@ -25,6 +26,16 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Pencil, Trash2, Sparkles, Loader2 } from "lucide-react";
 import { FormDialog, TextField, TextAreaField, useCanManage } from "@/components/form-fields";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 type StageRow = {
   title: string;
@@ -69,6 +80,7 @@ const splitLines = (s: string) =>
     .filter(Boolean);
 
 export default function CareerPaths() {
+  const { t } = useTranslation();
   const { data: paths, isLoading } = useListCareerPaths();
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -78,6 +90,21 @@ export default function CareerPaths() {
   const generate = useGenerateCareerPath();
   const [aiOpen, setAiOpen] = useState(false);
   const [aiField, setAiField] = useState("");
+  const [toDeletePath, setToDeletePath] = useState<{ id: string; name: string } | null>(null);
+
+  const handleDelete = async (id: string) => {
+    try {
+      const uid = localStorage.getItem("selectedUserId");
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (uid) headers["X-User-Id"] = uid;
+      const res = await fetch(`/api/career-paths/${id}`, { method: "DELETE", headers });
+      if (!res.ok) throw new Error(t("careerPaths.deleteFailed"));
+      qc.invalidateQueries({ queryKey: getListCareerPathsQueryKey() });
+      toast({ title: t("careerPaths.deleted") });
+    } catch (e: any) {
+      toast({ title: t("common.error"), description: e.message, variant: "destructive" });
+    }
+  };
 
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Row | null>(null);
@@ -119,7 +146,7 @@ export default function CareerPaths() {
 
   const submit = () => {
     if (!form.name.trim()) {
-      toast({ title: "اسم المسار مطلوب", variant: "destructive" });
+      toast({ title: t("careerPaths.nameRequired"), variant: "destructive" });
       return;
     }
     const data = {
@@ -140,11 +167,11 @@ export default function CareerPaths() {
         })),
     };
     const onSuccess = () => {
-      toast({ title: editing ? "تم تحديث المسار" : "تمت إضافة المسار" });
+      toast({ title: editing ? t("careerPaths.updated") : t("careerPaths.created") });
       setOpen(false);
       qc.invalidateQueries({ queryKey: getListCareerPathsQueryKey() });
     };
-    const onError = () => toast({ title: "حدث خطأ", variant: "destructive" });
+    const onError = () => toast({ title: t("common.genericError"), variant: "destructive" });
     if (editing) update.mutate({ id: editing.id, data }, { onSuccess, onError });
     else create.mutate({ data }, { onSuccess, onError });
   };
@@ -152,23 +179,23 @@ export default function CareerPaths() {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold text-foreground">المسارات المهنية</h1>
+        <h1 className="text-3xl font-bold text-foreground">{t("careerPaths.title")}</h1>
         {canManage && (
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => { setAiOpen(true); setAiField(""); }}>
               <Sparkles className="w-4 h-4 ml-2" />
-              توليد بالذكاء الاصطناعي
+              {t("common.aiGenerate")}
             </Button>
             <Button onClick={openCreate}>
               <Plus className="w-4 h-4 ml-2" />
-              إضافة مسار
+              {t("careerPaths.addPath")}
             </Button>
           </div>
         )}
       </div>
       <Card>
         <CardHeader>
-          <CardTitle>قائمة المسارات</CardTitle>
+          <CardTitle>{t("careerPaths.list")}</CardTitle>
         </CardHeader>
         <CardContent>
           {isLoading ? (
@@ -177,10 +204,10 @@ export default function CareerPaths() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="text-right">الاسم</TableHead>
-                  <TableHead className="text-right">المجال</TableHead>
-                  <TableHead className="text-right">عدد المراحل</TableHead>
-                  {canManage && <TableHead className="text-right">إجراءات</TableHead>}
+                  <TableHead className="text-right">{t("common.name")}</TableHead>
+                  <TableHead className="text-right">{t("careerPaths.field")}</TableHead>
+                  <TableHead className="text-right">{t("careerPaths.stageCount")}</TableHead>
+                  {canManage && <TableHead className="text-right">{t("common.actions")}</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -193,6 +220,9 @@ export default function CareerPaths() {
                       <TableCell>
                         <Button variant="ghost" size="icon" onClick={() => openEdit(path as Row)}>
                           <Pencil className="w-4 h-4" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="text-destructive" onClick={() => setToDeletePath({ id: path.id, name: path.name })}>
+                          <Trash2 className="w-4 h-4" />
                         </Button>
                       </TableCell>
                     )}
@@ -207,7 +237,7 @@ export default function CareerPaths() {
       {/* Timeline View */}
       {paths && paths.length > 0 && (
         <div className="space-y-4">
-          <h2 className="text-lg font-bold text-foreground">عرض المراحل</h2>
+          <h2 className="text-lg font-bold text-foreground">{t("careerPaths.viewStages")}</h2>
           {paths.map((path) => {
             const p = path as Row;
             if (!p.stages || p.stages.length === 0) return null;
@@ -225,9 +255,9 @@ export default function CareerPaths() {
                       }}
                     >
                       <div className="font-bold text-sm">{s.title}</div>
-                      {s.level && <div className="text-muted-foreground">المستوى: {s.level}</div>}
-                      {s.gradeNum && <div className="text-muted-foreground">الدرجة: {s.gradeNum}</div>}
-                      {s.durationInRole && <div className="text-muted-foreground">المدة: {s.durationInRole}</div>}
+                      {s.level && <div className="text-muted-foreground">{t("careerPaths.stageLevel")} {s.level}</div>}
+                      {s.gradeNum && <div className="text-muted-foreground">{t("careerPaths.stageGrade")} {s.gradeNum}</div>}
+                      {s.durationInRole && <div className="text-muted-foreground">{t("careerPaths.stageDuration")} {s.durationInRole}</div>}
                       {i < p.stages!.length - 1 && (
                         <div className="text-center text-lg text-muted-foreground">→</div>
                       )}
@@ -243,29 +273,29 @@ export default function CareerPaths() {
       <FormDialog
         open={open}
         onOpenChange={setOpen}
-        title={editing ? "تعديل مسار مهني" : "إضافة مسار مهني"}
+        title={editing ? t("careerPaths.editPath") : t("careerPaths.addPathTitle")}
         onSubmit={submit}
         submitting={create.isPending || update.isPending}
         wide
       >
         <div className="grid grid-cols-2 gap-4">
-          <TextField label="اسم المسار" value={form.name} onChange={(v) => setForm({ ...form, name: v })} required />
-          <TextField label="المجال" value={form.field} onChange={(v) => setForm({ ...form, field: v })} />
-          <TextField label="المدة" value={form.duration} onChange={(v) => setForm({ ...form, duration: v })} />
+          <TextField label={t("careerPaths.pathName")} value={form.name} onChange={(v) => setForm({ ...form, name: v })} required />
+          <TextField label={t("careerPaths.field")} value={form.field} onChange={(v) => setForm({ ...form, field: v })} />
+          <TextField label={t("careerPaths.duration")} value={form.duration} onChange={(v) => setForm({ ...form, duration: v })} />
         </div>
-        <TextAreaField label="الوصف" value={form.description} onChange={(v) => setForm({ ...form, description: v })} />
+        <TextAreaField label={t("common.description")} value={form.description} onChange={(v) => setForm({ ...form, description: v })} />
 
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <Label>المراحل</Label>
+            <Label>{t("careerPaths.stages")}</Label>
             <Button type="button" variant="outline" size="sm" onClick={() => setStages([...stages, { ...emptyStage }])}>
-              <Plus className="w-4 h-4 ml-1" /> مرحلة
+              <Plus className="w-4 h-4 ml-1" /> {t("careerPaths.addStage")}
             </Button>
           </div>
           {stages.map((s, i) => (
             <div key={i} className="rounded-md border border-border p-3 space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">مرحلة {i + 1}</span>
+                <span className="text-sm font-medium">{t("careerPaths.stageN", { n: i + 1 })}</span>
                 {stages.length > 1 && (
                   <Button type="button" variant="ghost" size="icon" onClick={() => setStages(stages.filter((_, idx) => idx !== i))}>
                     <Trash2 className="w-4 h-4 text-destructive" />
@@ -274,28 +304,28 @@ export default function CareerPaths() {
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div className="space-y-1">
-                  <Label className="text-xs">المسمى</Label>
+                  <Label className="text-xs">{t("careerPaths.stageTitle")}</Label>
                   <Input value={s.title} onChange={(e) => setStage(i, { title: e.target.value })} />
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-xs">المستوى</Label>
+                  <Label className="text-xs">{t("careerPaths.stageLevel")}</Label>
                   <Input value={s.level} onChange={(e) => setStage(i, { level: e.target.value })} />
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-xs">الدرجة</Label>
+                  <Label className="text-xs">{t("careerPaths.stageGradeLabel")}</Label>
                   <Input value={s.gradeNum} onChange={(e) => setStage(i, { gradeNum: e.target.value })} />
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-xs">المدة في الدور</Label>
+                  <Label className="text-xs">{t("careerPaths.stageDurationLabel")}</Label>
                   <Input value={s.durationInRole} onChange={(e) => setStage(i, { durationInRole: e.target.value })} />
                 </div>
               </div>
               <div className="space-y-1">
-                <Label className="text-xs">الوصف</Label>
+                <Label className="text-xs">{t("careerPaths.stageDescription")}</Label>
                 <Textarea rows={2} value={s.description} onChange={(e) => setStage(i, { description: e.target.value })} />
               </div>
               <div className="space-y-1">
-                <Label className="text-xs">الجدارات المطلوبة (افصل بفاصلة)</Label>
+                <Label className="text-xs">{t("careerPaths.stageCompetencies")}</Label>
                 <Textarea
                   rows={2}
                   value={s.requiredCompetencies}
@@ -303,7 +333,7 @@ export default function CareerPaths() {
                 />
               </div>
               <div className="space-y-1">
-                <Label className="text-xs">معايير الترقية (افصل بفاصلة)</Label>
+                <Label className="text-xs">{t("careerPaths.stageCriteria")}</Label>
                 <Textarea
                   rows={2}
                   value={s.promotionCriteria}
@@ -319,11 +349,11 @@ export default function CareerPaths() {
       <Dialog open={aiOpen} onOpenChange={setAiOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>توليد مسار مهني بالذكاء الاصطناعي</DialogTitle>
-            <DialogDescription>أدخل المجال وسيتم توليد مسار مهني متكامل بالمراحل.</DialogDescription>
+            <DialogTitle>{t("careerPaths.aiTitle")}</DialogTitle>
+            <DialogDescription>{t("careerPaths.aiDesc")}</DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
-            <TextField label="المجال" value={aiField} onChange={setAiField} required />
+            <TextField label={t("careerPaths.field")} value={aiField} onChange={setAiField} required />
             <Button
               disabled={!aiField.trim() || generate.isPending}
               className="w-full"
@@ -351,20 +381,43 @@ export default function CareerPaths() {
                       setEditing(null);
                       setAiOpen(false);
                       setOpen(true);
-                      toast({ title: "تم توليد المسار — راجع البيانات ثم احفظ" });
+                      toast({ title: t("careerPaths.aiSuccess") });
                     },
                     onError: () =>
-                      toast({ title: "فشل التوليد — تأكد من إعداد مفتاح OpenRouter", variant: "destructive" }),
+                      toast({ title: t("common.aiFailed"), variant: "destructive" }),
                   },
                 );
               }}
             >
               {generate.isPending ? <Loader2 className="size-4 animate-spin ml-2" /> : <Sparkles className="size-4 ml-2" />}
-              توليد
+              {t("common.generate")}
             </Button>
           </div>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={!!toDeletePath} onOpenChange={(o) => !o && setToDeletePath(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("careerPaths.deletePathTitle")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("careerPaths.deletePathDesc", { name: toDeletePath?.name ?? "" })}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="gap-2">
+            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (toDeletePath) handleDelete(toDeletePath.id);
+                setToDeletePath(null);
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {t("common.delete")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

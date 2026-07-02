@@ -5,6 +5,8 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Layout } from "@/components/layout";
 import { IdentityProvider, useIdentity } from "@/lib/identity";
+import { PermissionsProvider } from "@/lib/permissions";
+import { I18nProvider, useTranslation } from "@/lib/i18n";
 import SelectUser from "@/pages/select-user";
 import NotFound from "@/pages/not-found";
 
@@ -38,9 +40,10 @@ const queryClient = new QueryClient({
 });
 
 function PageLoader() {
+  const { t } = useTranslation();
   return (
     <div className="min-h-screen flex items-center justify-center text-muted-foreground">
-      جاري التحميل...
+      {t("common.loading")}
     </div>
   );
 }
@@ -80,26 +83,30 @@ function IdentityGate() {
   }
 
   return (
-    <Suspense fallback={<PageLoader />}>
-      <Layout>
-        <Router />
-      </Layout>
-    </Suspense>
+    <PermissionsProvider>
+      <Suspense fallback={<PageLoader />}>
+        <Layout>
+          <Router />
+        </Layout>
+      </Suspense>
+    </PermissionsProvider>
   );
 }
 
 function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <IdentityProvider>
-        <TooltipProvider>
-          <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-            <IdentityGate />
-          </WouterRouter>
-          <Toaster />
-        </TooltipProvider>
-      </IdentityProvider>
-    </QueryClientProvider>
+    <I18nProvider>
+      <QueryClientProvider client={queryClient}>
+        <IdentityProvider>
+          <TooltipProvider>
+            <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+              <IdentityGate />
+            </WouterRouter>
+            <Toaster />
+          </TooltipProvider>
+        </IdentityProvider>
+      </QueryClientProvider>
+    </I18nProvider>
   );
 }
 

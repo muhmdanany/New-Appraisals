@@ -72,3 +72,18 @@ func (h *Handler) UpdateCareerPath(w http.ResponseWriter, r *http.Request) {
 	h.audit(r, "careerPath.update", "CareerPath", &id)
 	httpx.JSON(w, http.StatusOK, cp)
 }
+
+// DeleteCareerPath handles DELETE /career-paths/{id}.
+func (h *Handler) DeleteCareerPath(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	if err := h.Store.DeleteCareerPath(r.Context(), id); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			httpx.Error(w, http.StatusNotFound, "Career path not found")
+			return
+		}
+		httpx.WriteErr(w, err)
+		return
+	}
+	h.audit(r, "careerPath.delete", "CareerPath", &id)
+	httpx.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}

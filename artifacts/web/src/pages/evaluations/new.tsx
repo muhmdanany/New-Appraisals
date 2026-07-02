@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
+import { useTranslation } from "@/lib/i18n";
 import {
   useListEmployees,
   useEvaluationFormData,
@@ -19,7 +20,8 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { SelectField } from "@/components/form-fields";
-import { Loader2, Save, Send, Plus, X } from "lucide-react";
+import { Loader2, Save, Send, Plus, X, BookOpen, ChevronDown, ChevronUp, ChevronsUpDown } from "lucide-react";
+import { CriteriaGuideDialog } from "./index";
 
 /* ───── Rating row (1–5 buttons matching Vercel UI) ───── */
 
@@ -30,22 +32,26 @@ const RATING_COLORS: Record<number, string> = {
   2: "#b87d12",
   1: "#c0392b",
 };
-const RATING_LABELS: Record<number, string> = {
-  5: "متميز",
-  4: "يتجاوز",
-  3: "يحقق",
-  2: "يحتاج تحسين",
-  1: "دون المستوى",
-};
+function getRatingLabels(t: (key: string) => string): Record<number, string> {
+  return {
+    5: t("evaluations.ratingLabels.5"),
+    4: t("evaluations.ratingLabels.4"),
+    3: t("evaluations.ratingLabels.3"),
+    2: t("evaluations.ratingLabels.2"),
+    1: t("evaluations.ratingLabels.1"),
+  };
+}
 
 function RatingRow({
   label,
   value,
   onChange,
+  ratingLabels,
 }: {
   label: string;
   value?: number;
   onChange: (v: number) => void;
+  ratingLabels: Record<number, string>;
 }) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 py-2 last:border-0">
@@ -59,7 +65,7 @@ function RatingRow({
             <button
               key={n}
               type="button"
-              title={RATING_LABELS[n]}
+              title={ratingLabels[n]}
               onClick={() => onChange(n)}
               className="flex size-8 items-center justify-center rounded-md border text-xs font-bold transition-colors"
               style={
@@ -85,8 +91,9 @@ function calculateLiveScore(opts: {
   sharedScores: Record<string, number>;
   jobScores: Record<string, number>;
   kpis: { achievement: number | "" }[];
+  ratingLabels: Record<number, string>;
 }) {
-  const { mode, kpiWeight, sharedScores, jobScores, kpis } = opts;
+  const { mode, kpiWeight, sharedScores, jobScores, kpis, ratingLabels } = opts;
   const compWeight = 100 - kpiWeight;
 
   // Competency score: average of all scores (1-5 → mapped to 0-100)
@@ -124,11 +131,11 @@ function calculateLiveScore(opts: {
   // Rating label
   let ratingLabel: string | null = null;
   if (totalScore !== null) {
-    if (totalScore >= 90) ratingLabel = "متميز";
-    else if (totalScore >= 75) ratingLabel = "يتجاوز";
-    else if (totalScore >= 60) ratingLabel = "يحقق";
-    else if (totalScore >= 40) ratingLabel = "يحتاج تحسين";
-    else ratingLabel = "دون المستوى";
+    if (totalScore >= 90) ratingLabel = ratingLabels[5];
+    else if (totalScore >= 75) ratingLabel = ratingLabels[4];
+    else if (totalScore >= 60) ratingLabel = ratingLabels[3];
+    else if (totalScore >= 40) ratingLabel = ratingLabels[2];
+    else ratingLabel = ratingLabels[1];
   }
 
   return { competencyScore, kpiScore, totalScore, ratingLabel };
@@ -161,11 +168,14 @@ export function EvaluationFormBody({
   const qc = useQueryClient();
   const { toast } = useToast();
   const [, navigate] = useLocation();
+  const { t } = useTranslation();
+  const RATING_LABELS = getRatingLabels(t);
+  const [guideOpen, setGuideOpen] = useState(false);
   const create = useCreateEvaluation();
   const update = useUpdateEvaluation();
   const submitEval = useSubmitEvaluation();
 
-  const [period, setPeriod] = useState(initial?.period ?? `العام ${new Date().getFullYear()}`);
+  const [period, setPeriod] = useState(initial?.period ?? `${t("evaluations.new.yearPrefix")} ${new Date().getFullYear()}`);
   const [mode, setMode] = useState(initial?.mode ?? "BOTH");
   const [kpiWeight, setKpiWeight] = useState(initial?.kpiWeight ?? 60);
   const [sharedScores, setSharedScores] = useState<Record<string, number>>(initial?.sharedScores ?? {});
@@ -175,6 +185,7 @@ export function EvaluationFormBody({
   );
   const [kpisSeeded, setKpisSeeded] = useState(Boolean(initial));
   const [saving, setSaving] = useState(false);
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
 
   // Seed KPI rows from the job's saved KPIs on first load
   if (!kpisSeeded && data) {
@@ -182,21 +193,33 @@ export function EvaluationFormBody({
     if (data.kpis.length > 0) {
       setKpis(data.kpis.map((k) => ({ name: k.name, achievement: "" })));
     }
+    // Initialize all sections as collapsed
+    const init: Record<string, boolean> = { kpis: true };
+    Object.keys(data.shared).forEach((cat) => { init[cat] = true; });
+    if (data.jobCompetencies.length > 0) init["job"] = true;
+    setCollapsed(init);
   }
 
   const showShared = mode === "SHARED" || mode === "BOTH";
   const showJob = mode === "SPECIFIC" || mode === "BOTH";
 
-  const live = calculateLiveScore({ mode, kpiWeight, sharedScores, jobScores, kpis });
+  const live = calculateLiveScore({ mode, kpiWeight, sharedScores, jobScores, kpis, ratingLabels: RATING_LABELS });
 
   const setShared = (key: string, v: number) =>
     setSharedScores((s) => ({ ...s, [key]: v }));
   const setJob = (key: string, v: number) =>
     setJobScores((s) => ({ ...s, [key]: v }));
 
+  const toggleSection = (key: string) =>
+    setCollapsed((c) => ({ ...c, [key]: !c[key] }));
+  const expandAll = () =>
+    setCollapsed((c) => Object.fromEntries(Object.keys(c).map((k) => [k, false])));
+  const collapseAll = () =>
+    setCollapsed((c) => Object.fromEntries(Object.keys(c).map((k) => [k, true])));
+
   async function save(thenSubmit: boolean) {
     if (!period.trim()) {
-      toast({ title: "الفترة مطلوبة", variant: "destructive" });
+      toast({ title: t("evaluations.new.periodRequired"), variant: "destructive" });
       return;
     }
 
@@ -232,28 +255,42 @@ export function EvaluationFormBody({
 
       if (thenSubmit) {
         await submitEval.mutateAsync({ id: resultId });
-        toast({ title: "تم الحفظ والإرسال للاعتماد" });
+        toast({ title: t("evaluations.new.savedSubmitted") });
       } else {
-        toast({ title: "تم حفظ المسودة" });
+        toast({ title: t("evaluations.new.savedDraft") });
       }
 
       qc.invalidateQueries({ queryKey: getListEvaluationsQueryKey() });
       navigate(`/evaluations/${resultId}`);
     } catch {
-      toast({ title: "تعذّر الحفظ", variant: "destructive" });
+      toast({ title: t("evaluations.new.saveFailed"), variant: "destructive" });
     } finally {
       setSaving(false);
     }
   }
 
   if (isLoading) return <Skeleton className="h-64 w-full" />;
-  if (!data) return <p className="text-muted-foreground py-6 text-center">تعذّر تحميل نموذج التقييم.</p>;
+  if (!data) return <p className="text-muted-foreground py-6 text-center">{t("evaluations.new.loadFailed")}</p>;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 relative">
+      {/* Fixed side button — مرجع المعايير */}
+      <button
+        onClick={() => setGuideOpen(true)}
+        className="fixed left-0 top-1/2 z-[9999] bg-white dark:bg-gray-800 border border-l-0 rounded-r-lg shadow-lg hover:bg-muted transition-colors origin-left"
+        style={{ transform: "translateY(-50%) rotate(180deg)", writingMode: "vertical-rl", padding: "16px 6px" }}
+        title="مرجع معايير التقييم"
+      >
+        <span className="flex items-center gap-1 text-xs font-medium text-primary whitespace-nowrap">
+          <BookOpen className="w-3.5 h-3.5" />
+          مرجع معايير التقييم
+        </span>
+      </button>
+      <CriteriaGuideDialog open={guideOpen} onClose={() => setGuideOpen(false)} />
+
       {/* Employee header card */}
       <Card className="bg-gradient-to-l from-[hsl(219_62%_15%)] to-[hsl(212_67%_24%)] p-5 text-white">
-        <div className="text-xs text-accent">نموذج تقييم الأداء الوظيفي</div>
+        <div className="text-xs text-accent">{t("evaluations.new.formTitle")}</div>
         <div className="text-lg font-bold">{data.employee?.name}</div>
         <div className="text-xs text-white/70">
           {data.employee?.employeeNumber}
@@ -265,22 +302,22 @@ export function EvaluationFormBody({
       {/* Setup fields */}
       <Card className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-3">
         <div className="space-y-1.5">
-          <Label>الفترة</Label>
+          <Label>{t("evaluations.new.periodLabel")}</Label>
           <Input value={period} onChange={(e) => setPeriod(e.target.value)} />
         </div>
         <SelectField
-          label="نطاق التقييم"
+          label={t("evaluations.new.scopeLabel")}
           value={mode}
           onChange={setMode}
           options={[
-            { value: "BOTH", label: "مشتركة + وظيفية" },
-            { value: "SHARED", label: "المشتركة فقط" },
-            { value: "SPECIFIC", label: "الوظيفية فقط" },
+            { value: "BOTH", label: t("evaluations.new.scopeAll") },
+            { value: "SHARED", label: t("evaluations.new.scopeShared") },
+            { value: "SPECIFIC", label: t("evaluations.new.scopeJob") },
           ]}
         />
         <div className="space-y-1.5">
           <Label>
-            وزن المؤشرات: {kpiWeight}% · الجدارات: {100 - kpiWeight}%
+            {t("evaluations.new.weightsLabel", { kpiW: String(kpiWeight), compW: String(100 - kpiWeight) })}
           </Label>
           <input
             type="range"
@@ -294,29 +331,52 @@ export function EvaluationFormBody({
         </div>
       </Card>
 
+      {/* Expand / Collapse all */}
+      <div className="flex gap-2 justify-end">
+        <Button variant="outline" size="sm" onClick={expandAll} className="gap-1.5 text-xs">
+          <ChevronsUpDown className="size-3.5" />
+          فرد الكل
+        </Button>
+        <Button variant="outline" size="sm" onClick={collapseAll} className="gap-1.5 text-xs">
+          <ChevronsUpDown className="size-3.5" />
+          طي الكل
+        </Button>
+      </div>
+
       {/* KPIs */}
       <Card className="p-4">
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-sm font-bold">مؤشرات الأداء (KPIs) — نسبة التحقق %</h2>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => setKpis((k) => [...k, { name: "", achievement: "" }])}
-          >
-            <Plus className="size-4" /> مؤشر
-          </Button>
-        </div>
+        <button
+          type="button"
+          onClick={() => toggleSection("kpis")}
+          className="mb-1 flex w-full items-center justify-between"
+        >
+          <div className="flex items-center gap-2">
+            {collapsed["kpis"] ? <ChevronDown className="size-4 text-muted-foreground" /> : <ChevronUp className="size-4 text-muted-foreground" />}
+          </div>
+          <h2 className="text-sm font-bold">{t("evaluations.new.kpiSection")}</h2>
+        </button>
+        {!collapsed["kpis"] && (
+          <>
+            <div className="mb-3 flex items-center justify-start">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setKpis((k) => [...k, { name: "", achievement: "" }])}
+              >
+                <Plus className="size-4" /> {t("evaluations.new.kpiIndicator")}
+              </Button>
+            </div>
         {kpis.length === 0 && (
           <p className="text-xs text-muted-foreground">
-            لا توجد مؤشرات. أضف مؤشراً أو اعتمد على الجدارات.
+            {t("evaluations.new.noKpis")}
           </p>
         )}
         <div className="space-y-2">
           {kpis.map((k, i) => (
             <div key={i} className="flex items-center gap-2">
               <Input
-                placeholder="اسم المؤشر"
+                placeholder={t("evaluations.new.kpiPlaceholder")}
                 value={k.name}
                 onChange={(e) =>
                   setKpis((arr) =>
@@ -353,38 +413,70 @@ export function EvaluationFormBody({
             </div>
           ))}
         </div>
+          </>
+        )}
       </Card>
 
       {/* Shared competencies by category */}
       {showShared &&
         Object.entries(data.shared).map(([category, items]) => (
           <Card key={category} className="p-4">
-            <h2 className="mb-2 text-sm font-bold">{category}</h2>
-            {items.map((item) => (
-              <RatingRow
-                key={item.key}
-                label={item.name}
-                value={sharedScores[item.key]}
-                onChange={(v) => setShared(item.key, v)}
-              />
-            ))}
+            <button
+              type="button"
+              onClick={() => toggleSection(category)}
+              className="flex w-full items-center justify-between"
+            >
+              <div className="flex items-center gap-2">
+                {collapsed[category] ? <ChevronDown className="size-4 text-muted-foreground" /> : <ChevronUp className="size-4 text-muted-foreground" />}
+                <span className="text-xs text-muted-foreground">{items.length} جدارة</span>
+              </div>
+              <h2 className="text-sm font-bold">{category}</h2>
+            </button>
+            {!collapsed[category] && (
+              <div className="mt-2">
+                {items.map((item) => (
+                  <RatingRow
+                    key={item.key}
+                    label={item.name}
+                    value={sharedScores[item.key]}
+                    onChange={(v) => setShared(item.key, v)}
+                    ratingLabels={RATING_LABELS}
+                  />
+                ))}
+              </div>
+            )}
           </Card>
         ))}
 
       {/* Job-specific competencies */}
       {showJob && data.jobCompetencies.length > 0 && (
         <Card className="p-4">
-          <h2 className="mb-2 text-sm font-bold">
-            الجدارات الوظيفية — {data.employee?.jobName ?? "غير محدد"}
-          </h2>
-          {data.jobCompetencies.map((c) => (
-            <RatingRow
-              key={c.key}
-              label={c.name}
-              value={jobScores[c.key]}
-              onChange={(v) => setJob(c.key, v)}
-            />
-          ))}
+          <button
+            type="button"
+            onClick={() => toggleSection("job")}
+            className="flex w-full items-center justify-between"
+          >
+            <div className="flex items-center gap-2">
+              {collapsed["job"] ? <ChevronDown className="size-4 text-muted-foreground" /> : <ChevronUp className="size-4 text-muted-foreground" />}
+              <span className="text-xs text-muted-foreground">{data.jobCompetencies.length} جدارة</span>
+            </div>
+            <h2 className="text-sm font-bold">
+              {t("evaluations.new.jobCompetencies", { job: data.employee?.jobName ?? t("evaluations.new.jobUnknown") })}
+            </h2>
+          </button>
+          {!collapsed["job"] && (
+            <div className="mt-2">
+              {data.jobCompetencies.map((c) => (
+                <RatingRow
+                  key={c.key}
+                  label={c.name}
+                  value={jobScores[c.key]}
+                  onChange={(v) => setJob(c.key, v)}
+                  ratingLabels={RATING_LABELS}
+                />
+              ))}
+            </div>
+          )}
         </Card>
       )}
 
@@ -392,28 +484,28 @@ export function EvaluationFormBody({
       <Card className="sticky bottom-0 flex flex-wrap items-center justify-between gap-3 p-4">
         <div className="flex items-center gap-4">
           <div>
-            <div className="text-xs text-muted-foreground">الدرجة الإجمالية</div>
+            <div className="text-xs text-muted-foreground">{t("evaluations.new.totalScore")}</div>
             <div className="text-2xl font-extrabold text-primary">
               {live.totalScore ?? "—"} / 100
             </div>
           </div>
           <div className="text-sm">
-            <div className="text-muted-foreground">التقدير</div>
+            <div className="text-muted-foreground">{t("evaluations.new.ratingLabel")}</div>
             <div className="font-bold">{live.ratingLabel ?? "—"}</div>
           </div>
           <div className="text-xs text-muted-foreground">
-            KPIs: {live.kpiScore?.toFixed(0) ?? "—"} · جدارات:{" "}
+            KPIs: {live.kpiScore?.toFixed(0) ?? "—"} · {t("evaluations.new.compLabel")}{" "}
             {live.competencyScore?.toFixed(0) ?? "—"}
           </div>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" disabled={saving} onClick={() => save(false)}>
             {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
-            حفظ كمسودة
+            {t("evaluations.new.saveDraft")}
           </Button>
           <Button disabled={saving || live.totalScore === null} onClick={() => save(true)}>
             <Send className="size-4" />
-            حفظ وإرسال للاعتماد
+            {t("evaluations.new.saveSubmit")}
           </Button>
         </div>
       </Card>
@@ -427,11 +519,12 @@ export default function NewEvaluationPage() {
   const { data: employees } = useListEmployees();
   const [employeeId, setEmployeeId] = useState("");
   const [started, setStarted] = useState(false);
+  const { t } = useTranslation();
 
   if (started && employeeId) {
     return (
       <div className="space-y-4">
-        <h1 className="text-xl font-bold text-foreground">تقييم جديد</h1>
+        <h1 className="text-xl font-bold text-foreground">{t("evaluations.new.title")}</h1>
         <EvaluationFormBody employeeId={employeeId} />
       </div>
     );
@@ -439,16 +532,16 @@ export default function NewEvaluationPage() {
 
   return (
     <div className="space-y-5">
-      <h1 className="text-xl font-bold text-foreground">تقييم جديد</h1>
+      <h1 className="text-xl font-bold text-foreground">{t("evaluations.new.title")}</h1>
       <Card className="max-w-md space-y-4 p-5">
         <div className="space-y-1.5">
-          <Label>اختر الموظف</Label>
+          <Label>{t("evaluations.new.selectEmployee")}</Label>
           <select
             className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             value={employeeId}
             onChange={(e) => setEmployeeId(e.target.value)}
           >
-            <option value="">— اختر —</option>
+            <option value="">{t("evaluations.new.selectPlaceholder")}</option>
             {employees?.map((emp) => (
               <option key={emp.id} value={emp.id}>
                 {emp.name} ({emp.employeeNumber})
@@ -456,11 +549,11 @@ export default function NewEvaluationPage() {
             ))}
           </select>
           {employees && employees.length === 0 && (
-            <p className="text-xs text-muted-foreground">لا يوجد موظفون ضمن نطاقك للتقييم.</p>
+            <p className="text-xs text-muted-foreground">{t("evaluations.new.noEmployees")}</p>
           )}
         </div>
         <Button disabled={!employeeId} onClick={() => setStarted(true)}>
-          بدء التقييم
+          {t("evaluations.new.startEval")}
         </Button>
       </Card>
     </div>

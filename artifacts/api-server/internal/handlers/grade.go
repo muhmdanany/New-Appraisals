@@ -44,6 +44,32 @@ func (h *Handler) CreateGrade(w http.ResponseWriter, r *http.Request) {
 	httpx.JSON(w, http.StatusCreated, g)
 }
 
+// UpdateGrade handles PUT /grades/{id}.
+func (h *Handler) UpdateGrade(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	var in store.GradeInput
+	if err := httpx.Decode(r, &in); err != nil {
+		httpx.WriteErr(w, err)
+		return
+	}
+	if !required(w, in.Num, "num") || !required(w, in.Name, "name") {
+		return
+	}
+	uid, err := h.Store.UpsertGrade(r.Context(), in)
+	if err != nil {
+		httpx.WriteErr(w, err)
+		return
+	}
+	_ = id // id used for routing; upsert uses num
+	g, err := h.Store.GradeByID(r.Context(), uid)
+	if err != nil {
+		httpx.WriteErr(w, err)
+		return
+	}
+	h.audit(r, "grade.update", "Grade", &uid)
+	httpx.JSON(w, http.StatusOK, g)
+}
+
 type importGradesRequest struct {
 	Rows []store.GradeInput `json:"rows"`
 }

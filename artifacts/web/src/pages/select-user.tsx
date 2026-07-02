@@ -1,7 +1,9 @@
 import { Award, UserRound } from "lucide-react";
 import { useIdentity, ROLE_LABELS } from "@/lib/identity";
+import { useTranslation } from "@/lib/i18n";
 
 export default function SelectUser() {
+  const { t } = useTranslation();
   const { users, isLoading, select } = useIdentity();
 
   return (
@@ -10,15 +12,15 @@ export default function SelectUser() {
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold text-primary flex items-center justify-center gap-2">
             <Award className="w-9 h-9" />
-            منصة الكفاءات
+            {t("selectUser.title")}
           </h1>
-          <p className="text-muted-foreground mt-2">اختر اسمك للمتابعة</p>
+          <p className="text-muted-foreground mt-2">{t("selectUser.subtitle")}</p>
         </div>
 
         {isLoading ? (
-          <p className="text-center text-muted-foreground">جاري التحميل...</p>
+          <p className="text-center text-muted-foreground">{t("selectUser.loading")}</p>
         ) : users.length === 0 ? (
-          <p className="text-center text-muted-foreground">لا يوجد مستخدمون متاحون.</p>
+          <p className="text-center text-muted-foreground">{t("selectUser.noUsers")}</p>
         ) : (
           <div className="grid gap-3 sm:grid-cols-2">
             {users.map((u) => (

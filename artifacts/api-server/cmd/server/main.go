@@ -38,6 +38,14 @@ func main() {
         aiClient := ai.New(cfg.OpenRouterAPIKey, cfg.OpenRouterModel)
         h := handlers.New(st, aiClient, cfg)
 
+        // Ensure notification table exists.
+        if err := st.EnsureNotificationTable(ctx); err != nil {
+                logger.Error("notification table init failed", "err", err)
+        }
+
+        // Start background notification scheduler.
+        h.Notifier.StartScheduler(ctx)
+
         srv := &http.Server{
                 Addr:              ":" + cfg.Port,
                 Handler:           router.New(h),

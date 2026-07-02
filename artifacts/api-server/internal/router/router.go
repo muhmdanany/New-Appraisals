@@ -1,127 +1,138 @@
-// Package router wires the HTTP routes for the REST API. All routes are served
-// under the /api base path to match the reverse-proxy configuration.
 package router
 
 import (
-        "net/http"
+	"net/http"
 
-        "github.com/go-chi/chi/v5"
-        "github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 
-        "competency/internal/handlers"
-        "competency/internal/identity"
+	"competency/internal/handlers"
+	"competency/internal/identity"
+	"competency/internal/rbac"
 )
 
-// New builds the chi router. The system is password-less: identity is resolved
-// from the X-User-Id header (identity.Resolver), and authorization is enforced
-// per route. Health checks and the identity picker (/users) are the only routes
-// reachable without a selected identity. Administrative catalog mutations
-// (jobs, competencies, grades, KPIs, career paths, employees) are gated to
-// org-wide roles (ADMIN/HR_MANAGER); evaluation/report handlers enforce their
-// own finer-grained scope internally.
 func New(h *handlers.Handler) http.Handler {
-        r := chi.NewRouter()
-        r.Use(middleware.RequestID)
-        r.Use(middleware.RealIP)
-        r.Use(middleware.Recoverer)
+	r := chi.NewRouter()
+	r.Use(middleware.RequestID)
+	r.Use(middleware.RealIP)
+	r.Use(middleware.Recoverer)
 
-        idmw := &identity.Resolver{Store: h.Store}
+	idmw := &identity.Resolver{Store: h.Store}
 
-        r.Route("/api", func(r chi.Router) {
-                r.Use(idmw.Middleware)
+	// Shorthand permission middleware builders.
+	perm := func(res rbac.Resource, act rbac.Action) func(http.Handler) http.Handler {
+		return h.Require(res, act)
+	}
 
-                r.Get("/healthz", h.Healthz)
-                r.Get("/health", h.Health)
+	r.Route("/api", func(r chi.Router) {
+		r.Use(idmw.Middleware)
 
-                // Selectable identities — must be reachable before an identity is picked.
-                r.Get("/users", h.ListUsers)
+		r.Get("/healthz", h.Healthz)
+		r.Get("/health", h.Health)
+		r.Get("/users", h.ListUsers)
 
-                // Everything below requires a selected identity.
-                r.Group(func(r chi.Router) {
-                        r.Use(h.RequireAuth)
+		r.Group(func(r chi.Router) {
+			r.Use(h.RequireAuth)
 
-                        // Org-wide only: administrative mutation. Reads stay open to any
-                        // authenticated identity.
-                        admin := h.RequireOrgWide
+			// Departments.
+			r.Get("/departments", h.ListDepartments)
 
-                        // Departments.
-                        r.Get("/departments", h.ListDepartments)
+			// Dashboard.
+			r.Get("/dashboard/stats", h.DashboardStats)
+			r.Get("/dashboard/analytics", h.DashboardAnalytics)
 
-                        // Dashboard.
-                        r.Get("/dashboard/stats", h.DashboardStats)
-                        r.Get("/dashboard/analytics", h.DashboardAnalytics)
+			// Competencies.
+			r.Get("/competencies", h.ListCompetencies)
+			r.Get("/competencies/options", h.CompetencyOptions)
+			r.With(perm(rbac.ResCompetencies, rbac.ActCreate)).Post("/competencies", h.CreateCompetency)
+			r.With(perm(rbac.ResCompetencies, rbac.ActEdit)).Put("/competencies/{id}", h.UpdateCompetency)
+			r.With(perm(rbac.ResCompetencies, rbac.ActDelete)).Delete("/competencies/{id}", h.DeleteCompetency)
+			r.With(perm(rbac.ResCompetencies, rbac.ActCreate)).Post("/competencies/generate", h.GenerateCompetencies)
+			r.With(perm(rbac.ResCompetencies, rbac.ActCreate)).Post("/competencies/import", h.ImportCompetencies)
 
-                        // Competencies.
-                        r.Get("/competencies", h.ListCompetencies)
-                        r.Get("/competencies/options", h.CompetencyOptions)
-                        r.With(admin).Post("/competencies", h.CreateCompetency)
-                        r.With(admin).Put("/competencies/{id}", h.UpdateCompetency)
-                        r.With(admin).Delete("/competencies/{id}", h.DeleteCompetency)
-                        r.With(admin).Post("/competencies/generate", h.GenerateCompetencies)
-                        r.With(admin).Post("/competencies/import", h.ImportCompetencies)
+			// Grades.
+			r.Get("/grades", h.ListGrades)
+			r.With(perm(rbac.ResGrades, rbac.ActCreate)).Post("/grades", h.CreateGrade)
+			r.With(perm(rbac.ResGrades, rbac.ActEdit)).Put("/grades/{id}", h.UpdateGrade)
+			r.With(perm(rbac.ResGrades, rbac.ActDelete)).Delete("/grades/{id}", h.DeleteGrade)
+			r.With(perm(rbac.ResGrades, rbac.ActCreate)).Post("/grades/import", h.ImportGrades)
 
-                        // Grades.
-                        r.Get("/grades", h.ListGrades)
-                        r.With(admin).Post("/grades", h.CreateGrade)
-                        r.With(admin).Delete("/grades/{id}", h.DeleteGrade)
-                        r.With(admin).Post("/grades/import", h.ImportGrades)
+			// Jobs.
+			r.Get("/jobs", h.ListJobs)
+			r.Get("/jobs/{id}", h.GetJob)
+			r.Get("/jobs/{id}/profile", h.JobProfile)
+			r.With(perm(rbac.ResJobs, rbac.ActCreate)).Post("/jobs", h.CreateJob)
+			r.With(perm(rbac.ResJobs, rbac.ActEdit)).Put("/jobs/{id}", h.UpdateJob)
+			r.With(perm(rbac.ResJobs, rbac.ActDelete)).Delete("/jobs/{id}", h.DeleteJob)
+			r.With(perm(rbac.ResJobs, rbac.ActEdit)).Post("/jobs/{id}/generate-description", h.GenerateJobDescription)
 
-                        // Jobs.
-                        r.Get("/jobs", h.ListJobs)
-                        r.Get("/jobs/{id}", h.GetJob)
-                        r.Get("/jobs/{id}/profile", h.JobProfile)
-                        r.With(admin).Post("/jobs", h.CreateJob)
-                        r.With(admin).Put("/jobs/{id}", h.UpdateJob)
-                        r.With(admin).Delete("/jobs/{id}", h.DeleteJob)
-                        r.With(admin).Post("/jobs/{id}/generate-description", h.GenerateJobDescription)
+			// Employees.
+			r.Get("/employees", h.ListEmployees)
+			r.With(perm(rbac.ResEmployees, rbac.ActCreate)).Post("/employees", h.CreateEmployee)
+			r.With(perm(rbac.ResEmployees, rbac.ActEdit)).Put("/employees/{id}", h.UpdateEmployee)
+			r.With(perm(rbac.ResEmployees, rbac.ActDelete)).Delete("/employees/{id}", h.DeleteEmployee)
+			r.With(perm(rbac.ResEmployees, rbac.ActCreate)).Post("/employees/import", h.ImportEmployees)
 
-                        // Employees. (Handlers also self-enforce scope/role.)
-                        r.Get("/employees", h.ListEmployees)
-                        r.With(admin).Post("/employees", h.CreateEmployee)
-                        r.With(admin).Put("/employees/{id}", h.UpdateEmployee)
-                        r.With(admin).Delete("/employees/{id}", h.DeleteEmployee)
-                        r.With(admin).Post("/employees/import", h.ImportEmployees)
+			// KPIs.
+			r.Get("/kpis", h.ListKpis)
+			r.Get("/kpis/{jobId}", h.GetKpiSet)
+			r.With(perm(rbac.ResKpis, rbac.ActEdit)).Put("/kpis/{jobId}", h.SaveKpiSet)
+			r.With(perm(rbac.ResKpis, rbac.ActCreate)).Post("/kpis/{jobId}/generate", h.GenerateKpis)
 
-                        // KPIs.
-                        r.Get("/kpis", h.ListKpis)
-                        r.Get("/kpis/{jobId}", h.GetKpiSet)
-                        r.With(admin).Put("/kpis/{jobId}", h.SaveKpiSet)
-                        r.With(admin).Post("/kpis/{jobId}/generate", h.GenerateKpis)
+			// Career paths.
+			r.Get("/career-paths", h.ListCareerPaths)
+			r.With(perm(rbac.ResCareerPaths, rbac.ActCreate)).Post("/career-paths", h.CreateCareerPath)
+			r.With(perm(rbac.ResCareerPaths, rbac.ActEdit)).Put("/career-paths/{id}", h.UpdateCareerPath)
+			r.With(perm(rbac.ResCareerPaths, rbac.ActDelete)).Delete("/career-paths/{id}", h.DeleteCareerPath)
+			r.With(perm(rbac.ResCareerPaths, rbac.ActCreate)).Post("/career-paths/generate", h.GenerateCareerPath)
 
-                        // Career paths.
-                        r.Get("/career-paths", h.ListCareerPaths)
-                        r.With(admin).Post("/career-paths", h.CreateCareerPath)
-                        r.With(admin).Put("/career-paths/{id}", h.UpdateCareerPath)
-                        r.With(admin).Post("/career-paths/generate", h.GenerateCareerPath)
+			// Evaluations.
+			r.Get("/evaluations", h.ListEvaluations)
+			r.Get("/evaluations/form-data", h.EvaluationFormData)
+			r.Get("/evaluations/department-distribution", h.DepartmentDistribution)
+			r.Get("/evaluations/{id}", h.GetEvaluation)
+			r.With(perm(rbac.ResEvaluations, rbac.ActCreate)).Post("/evaluations", h.CreateEvaluation)
+			r.With(perm(rbac.ResEvaluations, rbac.ActEdit)).Put("/evaluations/{id}", h.UpdateEvaluation)
+			r.With(perm(rbac.ResEvaluations, rbac.ActDelete)).Delete("/evaluations/{id}", h.DeleteEvaluation)
+			r.With(perm(rbac.ResEvaluations, rbac.ActEdit)).Post("/evaluations/{id}/submit", h.SubmitEvaluation)
+			r.With(perm(rbac.ResEvaluations, rbac.ActEdit)).Post("/evaluations/{id}/approve", h.ApproveEvaluation)
+			r.With(perm(rbac.ResEvaluations, rbac.ActEdit)).Post("/evaluations/{id}/reject", h.RejectEvaluation)
+			r.Post("/evaluations/{id}/acknowledge", h.AcknowledgeEvaluation)
+			r.Post("/evaluations/{id}/object", h.ObjectEvaluation)
 
-                        // Evaluations. (Handlers self-enforce role + subtree scope.)
-                        r.Get("/evaluations", h.ListEvaluations)
-                        r.Get("/evaluations/form-data", h.EvaluationFormData)
-                        r.Get("/evaluations/department-distribution", h.DepartmentDistribution)
-                        r.Get("/evaluations/{id}", h.GetEvaluation)
-                        r.Post("/evaluations", h.CreateEvaluation)
-                        r.Put("/evaluations/{id}", h.UpdateEvaluation)
-                        r.Post("/evaluations/{id}/submit", h.SubmitEvaluation)
-                        r.Post("/evaluations/{id}/approve", h.ApproveEvaluation)
-                        r.Post("/evaluations/{id}/reject", h.RejectEvaluation)
-                        r.Post("/evaluations/{id}/acknowledge", h.AcknowledgeEvaluation)
-                        r.Post("/evaluations/{id}/object", h.ObjectEvaluation)
+			// Reports.
+			r.Get("/reports/evaluations", h.ReportEvaluations)
+			r.Get("/reports/bell-curve", h.ReportBellCurve)
+			r.Get("/reports/org-tree", h.ReportOrgTree)
 
-                        // Reports. (Handlers self-enforce role + scope.)
-                        r.Get("/reports/evaluations", h.ReportEvaluations)
-                        r.Get("/reports/bell-curve", h.ReportBellCurve)
-                        r.Get("/reports/org-tree", h.ReportOrgTree)
+			// Admin panel.
+			r.With(perm(rbac.ResAdmin, rbac.ActView)).Get("/admin/users", h.AdminListUsers)
+			r.With(perm(rbac.ResAdmin, rbac.ActCreate)).Post("/users", h.CreateUser)
+			r.With(perm(rbac.ResAdmin, rbac.ActEdit)).Put("/users/{id}", h.UpdateUser)
+			r.With(perm(rbac.ResAdmin, rbac.ActDelete)).Delete("/users/{id}", h.DeactivateUser)
+			r.With(perm(rbac.ResAdmin, rbac.ActCreate)).Post("/admin/import-with-roles", h.AdminImportWithRoles)
 
-                        // Admin panel. (ADMIN/HR_MANAGER only)
-                        r.With(admin).Get("/admin/users", h.AdminListUsers)
-                        r.With(admin).Post("/users", h.CreateUser)
-                        r.With(admin).Put("/users/{id}", h.UpdateUser)
-                        r.With(admin).Delete("/users/{id}", h.DeactivateUser)
-                        r.With(admin).Post("/admin/import-with-roles", h.AdminImportWithRoles)
-                        r.With(admin).Get("/settings/evaluation", h.GetEvaluationSettings)
-                        r.With(admin).Put("/settings/evaluation", h.SaveEvaluationSettings)
-                })
-        })
+			// Office 365 integration.
+			r.With(perm(rbac.ResAdmin, rbac.ActView)).Get("/admin/office365/config", h.GetOffice365Config)
+			r.With(perm(rbac.ResAdmin, rbac.ActEdit)).Put("/admin/office365/config", h.SaveOffice365Config)
+			r.With(perm(rbac.ResAdmin, rbac.ActCreate)).Post("/admin/office365/fetch-users", h.FetchOffice365Users)
 
-        return r
+			// Settings (permissions + evaluation + field options).
+			r.With(perm(rbac.ResAdmin, rbac.ActView)).Get("/settings/evaluation", h.GetEvaluationSettings)
+			r.With(perm(rbac.ResAdmin, rbac.ActEdit)).Put("/settings/evaluation", h.SaveEvaluationSettings)
+			r.Get("/settings/field-options", h.GetFieldOptions)
+			r.With(perm(rbac.ResAdmin, rbac.ActEdit)).Put("/settings/field-options", h.SaveFieldOptions)
+			r.Get("/settings/permissions", h.GetPermissions)
+			r.With(perm(rbac.ResAdmin, rbac.ActEdit)).Put("/settings/permissions", h.SavePermissions)
+
+			// Notifications.
+			r.With(perm(rbac.ResAdmin, rbac.ActView)).Get("/admin/notification/config", h.GetNotificationConfig)
+			r.With(perm(rbac.ResAdmin, rbac.ActEdit)).Put("/admin/notification/config", h.SaveNotificationConfig)
+			r.With(perm(rbac.ResAdmin, rbac.ActEdit)).Post("/admin/notification/test", h.TestNotification)
+			r.With(perm(rbac.ResAdmin, rbac.ActEdit)).Post("/notifications/send", h.SendNotification)
+			r.With(perm(rbac.ResAdmin, rbac.ActView)).Get("/notifications/logs", h.NotificationLogs)
+		})
+	})
+
+	return r
 }

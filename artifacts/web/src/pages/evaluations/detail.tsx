@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useParams, Link } from "wouter";
+import { useTranslation } from "@/lib/i18n";
 import {
   useGetEvaluation,
   getGetEvaluationQueryKey,
@@ -22,19 +23,23 @@ import { FormDialog } from "@/components/form-fields";
 import { useIdentity } from "@/lib/identity";
 import { CheckCircle, XCircle, Send, ThumbsUp, AlertTriangle, Pencil, Printer } from "lucide-react";
 
-const STATUS_LABELS: Record<string, string> = {
-  DRAFT: "مسودة",
-  SUBMITTED: "بانتظار الاعتماد",
-  APPROVED: "معتمد",
-  REJECTED: "مرفوض",
-  ACKNOWLEDGED: "تم الاطلاع",
-  OBJECTED: "معترض عليه",
-};
+function getStatusLabels(t: (key: string) => string): Record<string, string> {
+  return {
+    DRAFT: t("evaluations.status.DRAFT"),
+    SUBMITTED: t("evaluations.status.SUBMITTED"),
+    APPROVED: t("evaluations.status.APPROVED"),
+    REJECTED: t("evaluations.status.REJECTED"),
+    ACKNOWLEDGED: t("evaluations.status.ACKNOWLEDGED"),
+    OBJECTED: t("evaluations.status.OBJECTED"),
+  };
+}
 
 export default function EvaluationDetail() {
   const { id } = useParams();
   const qc = useQueryClient();
   const { toast } = useToast();
+  const { t } = useTranslation();
+  const STATUS_LABELS = getStatusLabels(t);
   const { data: evaluation, isLoading } = useGetEvaluation(id!, {
     query: { enabled: !!id, queryKey: getGetEvaluationQueryKey(id!) },
   });
@@ -56,7 +61,7 @@ export default function EvaluationDetail() {
     toast({ title: msg });
     refresh();
   };
-  const err = () => toast({ title: "تعذّر تنفيذ الإجراء", variant: "destructive" });
+  const err = () => toast({ title: t("evaluations.detail.actionFailed"), variant: "destructive" });
 
   const { user } = useIdentity();
   const role = user?.role;
@@ -76,14 +81,14 @@ export default function EvaluationDetail() {
 
   const doReject = () => {
     if (!reason.trim()) {
-      toast({ title: "يرجى كتابة سبب الرفض", variant: "destructive" });
+      toast({ title: t("evaluations.detail.rejectReasonRequired"), variant: "destructive" });
       return;
     }
     reject.mutate(
       { id: id!, data: { reason } },
       {
         onSuccess: () => {
-          ok("تم رفض التقييم")();
+          ok(t("evaluations.detail.rejected"))();
           setRejectOpen(false);
           setReason("");
         },
@@ -97,14 +102,14 @@ export default function EvaluationDetail() {
       .filter((it) => objectedItems[it.id])
       .map((it) => ({ itemId: it.id, note: objectNote || undefined }));
     if (items.length === 0) {
-      toast({ title: "اختر بنداً واحداً على الأقل للاعتراض", variant: "destructive" });
+      toast({ title: t("evaluations.detail.objectItemsRequired"), variant: "destructive" });
       return;
     }
     object.mutate(
       { id: id!, data: { items } },
       {
         onSuccess: () => {
-          ok("تم تسجيل الاعتراض")();
+          ok(t("evaluations.detail.objected"))();
           setObjectOpen(false);
           setObjectedItems({});
           setObjectNote("");
@@ -117,48 +122,48 @@ export default function EvaluationDetail() {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold text-foreground">تفاصيل التقييم</h1>
+        <h1 className="text-3xl font-bold text-foreground">{t("evaluations.detail.title")}</h1>
         {!isLoading && evaluation && (
           <div className="flex gap-2 flex-wrap">
             <Button variant="outline" size="sm" onClick={() => window.print()}>
               <Printer className="w-4 h-4 ml-2" />
-              طباعة
+              {t("evaluations.detail.printBtn")}
             </Button>
             {editable && (
               <Button variant="outline" size="sm" asChild>
                 <Link href={`/evaluations/${id}/edit`}>
                   <Pencil className="w-4 h-4 ml-2" />
-                  تعديل
+                  {t("evaluations.detail.editBtn")}
                 </Link>
               </Button>
             )}
             {status === "DRAFT" && canSubmit && (
-              <Button onClick={() => submit.mutate({ id: id! }, { onSuccess: ok("تم إرسال التقييم للاعتماد"), onError: err })} disabled={submit.isPending}>
+              <Button onClick={() => submit.mutate({ id: id! }, { onSuccess: ok(t("evaluations.detail.submitted")), onError: err })} disabled={submit.isPending}>
                 <Send className="w-4 h-4 ml-2" />
-                إرسال للاعتماد
+                {t("evaluations.detail.submit")}
               </Button>
             )}
             {status === "SUBMITTED" && isApprover && (
               <>
-                <Button onClick={() => approve.mutate({ id: id! }, { onSuccess: ok("تم اعتماد التقييم"), onError: err })} disabled={approve.isPending}>
+                <Button onClick={() => approve.mutate({ id: id! }, { onSuccess: ok(t("evaluations.detail.approved")), onError: err })} disabled={approve.isPending}>
                   <CheckCircle className="w-4 h-4 ml-2" />
-                  اعتماد
+                  {t("evaluations.detail.approve")}
                 </Button>
                 <Button variant="outline" className="text-destructive" onClick={() => setRejectOpen(true)}>
                   <XCircle className="w-4 h-4 ml-2" />
-                  رفض
+                  {t("evaluations.detail.reject")}
                 </Button>
               </>
             )}
             {status === "APPROVED" && isSelfEmployee && (
               <>
-                <Button onClick={() => acknowledge.mutate({ id: id! }, { onSuccess: ok("تم تأكيد الاطلاع"), onError: err })} disabled={acknowledge.isPending}>
+                <Button onClick={() => acknowledge.mutate({ id: id! }, { onSuccess: ok(t("evaluations.detail.acknowledged")), onError: err })} disabled={acknowledge.isPending}>
                   <ThumbsUp className="w-4 h-4 ml-2" />
-                  تأكيد الاطلاع
+                  {t("evaluations.detail.acknowledge")}
                 </Button>
                 <Button variant="outline" onClick={() => setObjectOpen(true)}>
                   <AlertTriangle className="w-4 h-4 ml-2" />
-                  اعتراض
+                  {t("evaluations.detail.object")}
                 </Button>
               </>
             )}
@@ -168,25 +173,25 @@ export default function EvaluationDetail() {
 
       <Card>
         <CardHeader>
-          <CardTitle>معلومات التقييم</CardTitle>
+          <CardTitle>{t("evaluations.detail.info")}</CardTitle>
         </CardHeader>
         <CardContent>
           {isLoading ? (
             <Skeleton className="h-32 w-full" />
           ) : (
             <div className="grid grid-cols-2 gap-4">
-              <div><strong>الموظف:</strong> {evaluation?.employeeName}</div>
-              <div><strong>الفترة:</strong> {evaluation?.period}</div>
+              <div><strong>{t("evaluations.detail.employeeLabel")}</strong> {evaluation?.employeeName}</div>
+              <div><strong>{t("evaluations.detail.periodLabel")}</strong> {evaluation?.period}</div>
               <div>
-                <strong>الحالة:</strong>{" "}
+                <strong>{t("evaluations.detail.statusLabel")}</strong>{" "}
                 <Badge variant="secondary">{STATUS_LABELS[evaluation?.status ?? ""] ?? evaluation?.status}</Badge>
               </div>
-              <div><strong>النتيجة النهائية:</strong> {evaluation?.totalScore != null ? `${evaluation.totalScore}%` : "-"}</div>
-              <div><strong>نتيجة الجدارات:</strong> {evaluation?.competencyScore != null ? `${evaluation.competencyScore}%` : "-"}</div>
-              <div><strong>نتيجة المؤشرات:</strong> {evaluation?.kpiScore != null ? `${evaluation.kpiScore}%` : "-"}</div>
-              {evaluation?.ratingLabel && <div><strong>التقدير:</strong> {evaluation.ratingLabel}</div>}
+              <div><strong>{t("evaluations.detail.finalScore")}</strong> {evaluation?.totalScore != null ? `${evaluation.totalScore}%` : "-"}</div>
+              <div><strong>{t("evaluations.detail.compScore")}</strong> {evaluation?.competencyScore != null ? `${evaluation.competencyScore}%` : "-"}</div>
+              <div><strong>{t("evaluations.detail.kpiScore")}</strong> {evaluation?.kpiScore != null ? `${evaluation.kpiScore}%` : "-"}</div>
+              {evaluation?.ratingLabel && <div><strong>{t("evaluations.detail.ratingLabel")}</strong> {evaluation.ratingLabel}</div>}
               {evaluation?.rejectionReason && (
-                <div className="col-span-2 text-destructive"><strong>سبب الرفض:</strong> {evaluation.rejectionReason}</div>
+                <div className="col-span-2 text-destructive"><strong>{t("evaluations.detail.rejectReason")}</strong> {evaluation.rejectionReason}</div>
               )}
             </div>
           )}
@@ -196,15 +201,15 @@ export default function EvaluationDetail() {
       {!isLoading && evaluation?.items && evaluation.items.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>بنود التقييم</CardTitle>
+            <CardTitle>{t("evaluations.detail.items")}</CardTitle>
           </CardHeader>
           <CardContent>
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="text-right">البند</TableHead>
-                  <TableHead className="text-right">النوع</TableHead>
-                  <TableHead className="text-right">الدرجة</TableHead>
+                  <TableHead className="text-right">{t("evaluations.detail.itemName")}</TableHead>
+                  <TableHead className="text-right">{t("evaluations.detail.itemType")}</TableHead>
+                  <TableHead className="text-right">{t("evaluations.detail.itemScore")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -224,13 +229,13 @@ export default function EvaluationDetail() {
       <FormDialog
         open={rejectOpen}
         onOpenChange={setRejectOpen}
-        title="رفض التقييم"
+        title={t("evaluations.detail.rejectTitle")}
         onSubmit={doReject}
         submitting={reject.isPending}
-        submitLabel="تأكيد الرفض"
+        submitLabel={t("evaluations.detail.rejectConfirm")}
       >
         <div className="space-y-1.5">
-          <Label>سبب الرفض</Label>
+          <Label>{t("evaluations.detail.rejectReasonLabel")}</Label>
           <Textarea value={reason} rows={4} onChange={(e) => setReason(e.target.value)} />
         </div>
       </FormDialog>
@@ -238,13 +243,13 @@ export default function EvaluationDetail() {
       <FormDialog
         open={objectOpen}
         onOpenChange={setObjectOpen}
-        title="الاعتراض على التقييم"
+        title={t("evaluations.detail.objectTitle")}
         onSubmit={doObject}
         submitting={object.isPending}
-        submitLabel="تسجيل الاعتراض"
+        submitLabel={t("evaluations.detail.objectConfirm")}
       >
         <div className="space-y-2">
-          <Label>البنود المعترض عليها</Label>
+          <Label>{t("evaluations.detail.objectItems")}</Label>
           <div className="max-h-52 overflow-y-auto rounded-md border border-border p-2 space-y-1">
             {(evaluation?.items ?? []).map((it) => (
               <label key={it.id} className="flex items-center gap-2 px-1 py-1 rounded hover:bg-secondary cursor-pointer text-sm">
@@ -259,7 +264,7 @@ export default function EvaluationDetail() {
           </div>
         </div>
         <div className="space-y-1.5">
-          <Label>ملاحظة الاعتراض</Label>
+          <Label>{t("evaluations.detail.objectNote")}</Label>
           <Textarea value={objectNote} rows={3} onChange={(e) => setObjectNote(e.target.value)} />
         </div>
       </FormDialog>

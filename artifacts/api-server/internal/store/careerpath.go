@@ -155,3 +155,23 @@ func orEmptySlice(s []string) []string {
 	}
 	return s
 }
+
+// DeleteCareerPath removes a career path and its stages.
+func (s *Store) DeleteCareerPath(ctx context.Context, id string) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	if _, err := tx.Exec(ctx, `DELETE FROM "CareerPathStage" WHERE "careerPathId"=$1`, id); err != nil {
+		return err
+	}
+	ct, err := tx.Exec(ctx, `DELETE FROM "CareerPath" WHERE id=$1`, id)
+	if err != nil {
+		return err
+	}
+	if ct.RowsAffected() == 0 {
+		return pgx.ErrNoRows
+	}
+	return tx.Commit(ctx)
+}

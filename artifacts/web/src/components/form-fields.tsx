@@ -20,11 +20,19 @@ import {
 } from "@/components/ui/select";
 import { Loader2 } from "lucide-react";
 import { useIdentity } from "@/lib/identity";
+import { usePermission, type Resource, type Action } from "@/lib/permissions";
 
-// Management actions are gated by the selected identity's role.
-export function useCanManage(roles: string[] = ["ADMIN"]) {
+// Management actions are gated by the permissions engine.
+// Legacy signature kept for backward compatibility: roles param is ignored now.
+export function useCanManage(_roles?: string[]) {
+  // "canManage" means at least edit-level access.
+  // Since each page calls useCanManage without specifying a resource,
+  // this hook is kept as a simple role-based fallback;
+  // pages should migrate to usePermission(resource, action) directly.
   const { user } = useIdentity();
-  return !!user && roles.includes(user.role);
+  if (!user) return false;
+  // ADMIN and HR_MANAGER are org-wide managers by default.
+  return ["ADMIN", "HR_MANAGER"].includes(user.role);
 }
 
 export function FormDialog({

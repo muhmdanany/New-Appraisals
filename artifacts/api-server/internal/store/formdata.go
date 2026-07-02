@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -85,9 +86,31 @@ func (s *Store) EvaluationFormData(ctx context.Context, employeeID string) (*Eva
 		emp.Job = &FormJob{ID: *jobID, Name: *jobName}
 	}
 
+	// Build type-value → Arabic label map from field options settings.
+	typeLabelMap := map[string]string{
+		"BEHAVIORAL": "سلوكية",
+		"LEADERSHIP": "قيادية",
+		"TECHNICAL":  "فنية",
+	}
+	raw, ferr := s.GetSetting(ctx, "field_options")
+	if ferr == nil {
+		var fo struct {
+			CompetencyTypes []struct {
+				Value  string `json:"value"`
+				Label  string `json:"label"`
+				Active bool   `json:"active"`
+			} `json:"competencyTypes"`
+		}
+		if json.Unmarshal(raw, &fo) == nil {
+			for _, t := range fo.CompetencyTypes {
+				typeLabelMap[t.Value] = t.Label
+			}
+		}
+	}
+
 	out := &EvaluationFormData{
 		Employee:        emp,
-		Shared:          map[string][]FormSharedItem{"behavioral": {}, "leadership": {}, "technical": {}},
+		Shared:          map[string][]FormSharedItem{},
 		JobCompetencies: []FormJobCompetency{},
 		Kpis:            []FormKpi{},
 	}
@@ -110,14 +133,11 @@ func (s *Store) EvaluationFormData(ctx context.Context, employeeID string) (*Eva
 		if key != nil {
 			item.Key = *key
 		}
-		switch typ {
-		case "BEHAVIORAL":
-			out.Shared["behavioral"] = append(out.Shared["behavioral"], item)
-		case "LEADERSHIP":
-			out.Shared["leadership"] = append(out.Shared["leadership"], item)
-		case "TECHNICAL":
-			out.Shared["technical"] = append(out.Shared["technical"], item)
+		label, ok := typeLabelMap[typ]
+		if !ok {
+			label = typ
 		}
+		out.Shared[label] = append(out.Shared[label], item)
 	}
 	if err := srows.Err(); err != nil {
 		return nil, err
