@@ -35,6 +35,24 @@ func scanEmployee(rows pgx.Rows) (domain.Employee, error) {
 	return e, nil
 }
 
+// GetEmployeeRoles returns a map of employeeID → user role for all employees with linked users.
+func (s *Store) GetEmployeeRoles(ctx context.Context) (map[string]string, error) {
+	rows, err := s.pool.Query(ctx, `SELECT "employeeId", role FROM "User" WHERE "employeeId" IS NOT NULL`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	m := map[string]string{}
+	for rows.Next() {
+		var empID, role string
+		if err := rows.Scan(&empID, &role); err != nil {
+			return nil, err
+		}
+		m[empID] = role
+	}
+	return m, rows.Err()
+}
+
 // ListAllEmployees returns every employee (org-wide access).
 func (s *Store) ListAllEmployees(ctx context.Context, search string) ([]domain.Employee, error) {
 	q := employeeSelect

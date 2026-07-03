@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
 import { useTranslation } from "@/lib/i18n";
+import { useQuery } from "@tanstack/react-query";
 import {
-  useListEmployees,
   useEvaluationFormData,
   useCreateEvaluation,
   useUpdateEvaluation,
@@ -156,14 +156,44 @@ export function EvaluationFormBody({
   employeeId,
   evaluationId,
   initial,
+  initialTemplateId,
+  evalType = "EMPLOYEE",
 }: {
   employeeId: string;
   evaluationId?: string;
   initial?: EvaluationInitial;
+  initialTemplateId?: string;
+  evalType?: string;
 }) {
+  const hasEmployee = Boolean(employeeId);
+  const [templateId, setTemplateId] = useState<string | undefined>(initialTemplateId);
+
+  // Fetch available templates filtered by evalType.
+  const { data: templates } = useQuery<{ id: string; name: string; isDefault: boolean; evalType: string }[]>({
+    queryKey: ["eval-templates", evalType],
+    queryFn: async () => {
+      const uid = localStorage.getItem("selectedUserId");
+      const h: Record<string, string> = { "Content-Type": "application/json" };
+      if (uid) h["X-User-Id"] = uid;
+      const r = await fetch(`/api/admin/templates?evalType=${evalType}`, { headers: h });
+      if (!r.ok) return [];
+      return r.json();
+    },
+  });
+
+  // Auto-select default template if none chosen and templates available.
+  if (!templateId && templates?.length && !evaluationId) {
+    const def = templates.find((t) => t.isDefault);
+    if (def) setTemplateId(def.id);
+  }
+
+  const formParams = templateId ? { employeeId, templateId } : { employeeId };
   const { data, isLoading } = useEvaluationFormData(
-    { employeeId },
-    { query: { queryKey: getEvaluationFormDataQueryKey({ employeeId }) } },
+    formParams,
+    { query: {
+      queryKey: [...getEvaluationFormDataQueryKey({ employeeId }), templateId ?? ""],
+      enabled: hasEmployee,
+    } },
   );
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -248,6 +278,8 @@ export function EvaluationFormBody({
             sharedScores: filteredShared,
             jobScores: filteredJob,
             kpis: kpiList,
+            templateId,
+            evalType,
           },
         });
         resultId = result.id;
@@ -269,38 +301,50 @@ export function EvaluationFormBody({
     }
   }
 
-  if (isLoading) return <Skeleton className="h-64 w-full" />;
-  if (!data) return <p className="text-muted-foreground py-6 text-center">{t("evaluations.new.loadFailed")}</p>;
+  if (hasEmployee && isLoading) return <Skeleton className="h-64 w-full" />;
+  if (hasEmployee && !data) return <p className="text-muted-foreground py-6 text-center">{t("evaluations.new.loadFailed")}</p>;
 
   return (
     <div className="space-y-4 relative">
       {/* Fixed side button — مرجع المعايير */}
       <button
         onClick={() => setGuideOpen(true)}
-        className="fixed left-0 top-1/2 z-[9999] bg-white dark:bg-gray-800 border border-l-0 rounded-r-lg shadow-lg hover:bg-muted transition-colors origin-left"
-        style={{ transform: "translateY(-50%) rotate(180deg)", writingMode: "vertical-rl", padding: "16px 6px" }}
+        className="fixed right-0 top-1/2 -translate-y-1/2 z-[9999] bg-primary text-primary-foreground rounded-l-lg shadow-xl hover:opacity-90 transition-opacity px-2 py-6"
         title="مرجع معايير التقييم"
       >
-        <span className="flex items-center gap-1 text-xs font-medium text-primary whitespace-nowrap">
-          <BookOpen className="w-3.5 h-3.5" />
-          مرجع معايير التقييم
-        </span>
+        <span className="text-xs font-bold" style={{ writingMode: "vertical-rl" }}>مرجع المعايير</span>
       </button>
       <CriteriaGuideDialog open={guideOpen} onClose={() => setGuideOpen(false)} />
 
       {/* Employee header card */}
       <Card className="bg-gradient-to-l from-[hsl(219_62%_15%)] to-[hsl(212_67%_24%)] p-5 text-white">
         <div className="text-xs text-accent">{t("evaluations.new.formTitle")}</div>
-        <div className="text-lg font-bold">{data.employee?.name}</div>
+        <div className="text-lg font-bold">{data?.employee?.name ?? "—"}</div>
         <div className="text-xs text-white/70">
-          {data.employee?.employeeNumber}
-          {data.employee?.jobName ? ` · ${data.employee.jobName}` : ""}
-          {data.employee?.departmentName ? ` · ${data.employee.departmentName}` : ""}
+          {data?.employee?.employeeNumber ?? ""}
+          {data?.employee?.jobName ? ` · ${data.employee.jobName}` : ""}
+          {data?.employee?.departmentName ? ` · ${data.employee.departmentName}` : ""}
         </div>
       </Card>
 
       {/* Setup fields */}
       <Card className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-3">
+        {/* Template selector — only show when templates exist */}
+        {templates && templates.length > 0 && !evaluationId && (
+          <div className="space-y-1.5 sm:col-span-3">
+            <Label>نموذج التقييم</Label>
+            <select
+              className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+              value={templateId ?? ""}
+              onChange={(e) => setTemplateId(e.target.value || undefined)}
+            >
+              <option value="">بدون نموذج (الجدارات الافتراضية)</option>
+              {templates.map((tpl) => (
+                <option key={tpl.id} value={tpl.id}>{tpl.name}{tpl.isDefault ? " ⭐" : ""}</option>
+              ))}
+            </select>
+          </div>
+        )}
         <div className="space-y-1.5">
           <Label>{t("evaluations.new.periodLabel")}</Label>
           <Input value={period} onChange={(e) => setPeriod(e.target.value)} />
@@ -348,7 +392,7 @@ export function EvaluationFormBody({
         <button
           type="button"
           onClick={() => toggleSection("kpis")}
-          className="mb-1 flex w-full items-center justify-between"
+          className="mb-1 flex w-full items-center justify-between flex-row-reverse"
         >
           <div className="flex items-center gap-2">
             {collapsed["kpis"] ? <ChevronDown className="size-4 text-muted-foreground" /> : <ChevronUp className="size-4 text-muted-foreground" />}
@@ -418,13 +462,13 @@ export function EvaluationFormBody({
       </Card>
 
       {/* Shared competencies by category */}
-      {showShared &&
+      {showShared && data &&
         Object.entries(data.shared).map(([category, items]) => (
           <Card key={category} className="p-4">
             <button
               type="button"
               onClick={() => toggleSection(category)}
-              className="flex w-full items-center justify-between"
+              className="flex w-full items-center justify-between flex-row-reverse"
             >
               <div className="flex items-center gap-2">
                 {collapsed[category] ? <ChevronDown className="size-4 text-muted-foreground" /> : <ChevronUp className="size-4 text-muted-foreground" />}
@@ -449,12 +493,12 @@ export function EvaluationFormBody({
         ))}
 
       {/* Job-specific competencies */}
-      {showJob && data.jobCompetencies.length > 0 && (
+      {showJob && data && data.jobCompetencies.length > 0 && (
         <Card className="p-4">
           <button
             type="button"
             onClick={() => toggleSection("job")}
-            className="flex w-full items-center justify-between"
+            className="flex w-full items-center justify-between flex-row-reverse"
           >
             <div className="flex items-center gap-2">
               {collapsed["job"] ? <ChevronDown className="size-4 text-muted-foreground" /> : <ChevronUp className="size-4 text-muted-foreground" />}
@@ -513,29 +557,71 @@ export function EvaluationFormBody({
   );
 }
 
-/* ───── Main page component (two-step flow) ───── */
+/* ───── Main page component (single-step flow) ───── */
 
 export default function NewEvaluationPage() {
-  const { data: employees } = useListEmployees();
+  const [evalType, setEvalType] = useState<"EMPLOYEE" | "MANAGER">("EMPLOYEE");
   const [employeeId, setEmployeeId] = useState("");
-  const [started, setStarted] = useState(false);
   const { t } = useTranslation();
 
-  if (started && employeeId) {
-    return (
-      <div className="space-y-4">
-        <h1 className="text-xl font-bold text-foreground">{t("evaluations.new.title")}</h1>
-        <EvaluationFormBody employeeId={employeeId} />
-      </div>
-    );
-  }
+  // Fetch employees filtered by evalType (role)
+  const { data: employees } = useQuery<{ id: string; name: string; employeeNumber: string }[]>({
+    queryKey: ["employees-for-eval", evalType],
+    queryFn: async () => {
+      const uid = localStorage.getItem("selectedUserId");
+      const h: Record<string, string> = { "Content-Type": "application/json" };
+      if (uid) h["X-User-Id"] = uid;
+      const r = await fetch(`/api/employees?evalType=${evalType}`, { headers: h });
+      if (!r.ok) return [];
+      return r.json();
+    },
+  });
+
+  // Reset employee when type changes
+  const handleTypeChange = (newType: "EMPLOYEE" | "MANAGER") => {
+    setEvalType(newType);
+    setEmployeeId("");
+  };
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <h1 className="text-xl font-bold text-foreground">{t("evaluations.new.title")}</h1>
-      <Card className="max-w-md space-y-4 p-5">
+
+      {/* Evaluation type selector */}
+      <Card className="p-4">
+        <div className="space-y-3">
+          <Label className="font-bold">{t("evaluations.selectEvalType")}</Label>
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={() => handleTypeChange("EMPLOYEE")}
+              className={`flex-1 rounded-lg border-2 p-3 text-sm font-medium transition-colors ${
+                evalType === "EMPLOYEE"
+                  ? "border-primary bg-primary/10 text-primary"
+                  : "border-border hover:border-primary/40"
+              }`}
+            >
+              {t("evaluations.evalTypeEmployee")}
+            </button>
+            <button
+              type="button"
+              onClick={() => handleTypeChange("MANAGER")}
+              className={`flex-1 rounded-lg border-2 p-3 text-sm font-medium transition-colors ${
+                evalType === "MANAGER"
+                  ? "border-primary bg-primary/10 text-primary"
+                  : "border-border hover:border-primary/40"
+              }`}
+            >
+              {t("evaluations.evalTypeManager")}
+            </button>
+          </div>
+        </div>
+      </Card>
+
+      {/* Employee selector */}
+      <Card className="p-4">
         <div className="space-y-1.5">
-          <Label>{t("evaluations.new.selectEmployee")}</Label>
+          <Label className="font-bold">{t("evaluations.new.selectEmployee")}</Label>
           <select
             className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             value={employeeId}
@@ -552,10 +638,12 @@ export default function NewEvaluationPage() {
             <p className="text-xs text-muted-foreground">{t("evaluations.new.noEmployees")}</p>
           )}
         </div>
-        <Button disabled={!employeeId} onClick={() => setStarted(true)}>
-          {t("evaluations.new.startEval")}
-        </Button>
       </Card>
+
+      {/* Form body — always visible, disabled until employee selected */}
+      <div className={employeeId ? "" : "opacity-50 pointer-events-none"}>
+        <EvaluationFormBody key={employeeId || "__empty"} employeeId={employeeId} evalType={evalType} />
+      </div>
     </div>
   );
 }

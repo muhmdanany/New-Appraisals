@@ -2,9 +2,6 @@ package store
 
 import (
 	"context"
-	"errors"
-
-	"github.com/jackc/pgx/v4"
 
 	"competency/internal/domain"
 )
@@ -117,19 +114,14 @@ func (s *Store) UpdateCompetency(ctx context.Context, id string, in CompetencyIn
 	return s.competencyByID(ctx, id)
 }
 
-// DeleteCompetency removes a non-shared competency. Returns false if shared.
+// DeleteCompetency removes a competency by id, cleaning up references first.
 func (s *Store) DeleteCompetency(ctx context.Context, id string) (deleted, shared bool, err error) {
-	var isShared bool
-	row := s.pool.QueryRow(ctx, `SELECT "isShared" FROM "Competency" WHERE id=$1`, id)
-	if err := row.Scan(&isShared); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return false, false, nil
-		}
-		return false, false, err
-	}
-	if isShared {
-		return false, true, nil
-	}
+	// Clean up evaluation items referencing this competency.
+	_, _ = s.pool.Exec(ctx, `DELETE FROM "EvaluationItem" WHERE "competencyId"=$1`, id)
+	// Clean up job-competency links.
+	_, _ = s.pool.Exec(ctx, `DELETE FROM "JobCompetency" WHERE "competencyId"=$1`, id)
+	// Clean up template items referencing this competency.
+	_, _ = s.pool.Exec(ctx, `DELETE FROM eval_template_items WHERE competency_id=$1`, id)
 	_, err = s.pool.Exec(ctx, `DELETE FROM "Competency" WHERE id=$1`, id)
 	return err == nil, false, err
 }

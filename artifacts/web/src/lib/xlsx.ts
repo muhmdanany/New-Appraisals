@@ -96,3 +96,33 @@ export function downloadImportTemplate() {
   ];
   exportToSpreadsheet("نموذج_استيراد_الموظفين.xlsx", template);
 }
+
+/**
+ * Generate and download a template Excel file for org structure import.
+ */
+export function downloadOrgTemplate() {
+  const template = [
+    {
+      "الرقم الوظيفي": "E-001",
+      "الاسم": "سعد القحطاني",
+      "البريد الإلكتروني": "saad@company.com",
+      "الدور": "مدير أعلى",
+      "رقم المدير": "",
+    },
+    {
+      "الرقم الوظيفي": "E-002",
+      "الاسم": "نورة العتيبي",
+      "البريد الإلكتروني": "noura@company.com",
+      "الدور": "مدير مباشر",
+      "رقم المدير": "E-001",
+    },
+    {
+      "الرقم الوظيفي": "E-003",
+      "الاسم": "خالد الدوسري",
+      "البريد الإلكتروني": "khaled@company.com",
+      "الدور": "موظف",
+      "رقم المدير": "E-002",
+    },
+  ];
+  exportToSpreadsheet("نموذج_استيراد_الهيكل_التنظيمي.xlsx", template);
+}

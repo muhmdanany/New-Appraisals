@@ -38,9 +38,9 @@ const HREF_RESOURCE: Record<string, string> = {
 
 const NAV_ITEMS = [
   { href: "/", label: "nav.dashboard", icon: LayoutDashboard },
+  { href: "/evaluations", label: "nav.evaluations", icon: ClipboardCheck },
   { href: "/career-paths", label: "nav.careerPaths", icon: Map },
   { href: "/kpis", label: "nav.kpis", icon: Target },
-  { href: "/evaluations", label: "nav.evaluations", icon: ClipboardCheck },
   { href: "/reports", label: "nav.reports", icon: FileBarChart },
   { href: "/bell-curve", label: "nav.bellCurve", icon: PieChart },
   { href: "/org-chart", label: "nav.orgChart", icon: Network },

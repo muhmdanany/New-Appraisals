@@ -109,7 +109,7 @@ func New(h *handlers.Handler) http.Handler {
 			r.With(perm(rbac.ResAdmin, rbac.ActView)).Get("/admin/users", h.AdminListUsers)
 			r.With(perm(rbac.ResAdmin, rbac.ActCreate)).Post("/users", h.CreateUser)
 			r.With(perm(rbac.ResAdmin, rbac.ActEdit)).Put("/users/{id}", h.UpdateUser)
-			r.With(perm(rbac.ResAdmin, rbac.ActDelete)).Delete("/users/{id}", h.DeactivateUser)
+			r.With(perm(rbac.ResAdmin, rbac.ActDelete)).Delete("/users/{id}", h.DeleteUser)
 			r.With(perm(rbac.ResAdmin, rbac.ActCreate)).Post("/admin/import-with-roles", h.AdminImportWithRoles)
 
 			// Office 365 integration.
@@ -131,6 +131,14 @@ func New(h *handlers.Handler) http.Handler {
 			r.With(perm(rbac.ResAdmin, rbac.ActEdit)).Post("/admin/notification/test", h.TestNotification)
 			r.With(perm(rbac.ResAdmin, rbac.ActEdit)).Post("/notifications/send", h.SendNotification)
 			r.With(perm(rbac.ResAdmin, rbac.ActView)).Get("/notifications/logs", h.NotificationLogs)
+
+			// Evaluation templates.
+			r.With(perm(rbac.ResAdmin, rbac.ActView)).Get("/admin/templates", h.ListTemplates)
+			r.With(perm(rbac.ResAdmin, rbac.ActView)).Get("/admin/templates/{id}", h.GetTemplate)
+			r.With(perm(rbac.ResAdmin, rbac.ActCreate)).Post("/admin/templates", h.CreateTemplate)
+			r.With(perm(rbac.ResAdmin, rbac.ActEdit)).Put("/admin/templates/{id}", h.UpdateTemplate)
+			r.With(perm(rbac.ResAdmin, rbac.ActDelete)).Delete("/admin/templates/{id}", h.DeleteTemplate)
+			r.With(perm(rbac.ResAdmin, rbac.ActCreate)).Post("/admin/templates/{id}/duplicate", h.DuplicateTemplate)
 		})
 	})
 

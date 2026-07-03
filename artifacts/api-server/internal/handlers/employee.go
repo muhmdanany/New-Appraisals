@@ -19,6 +19,7 @@ func (h *Handler) ListEmployees(w http.ResponseWriter, r *http.Request) {
                 return
         }
         search := qStr(r, "search")
+        evalType := qStr(r, "evalType") // EMPLOYEE | MANAGER — filter by user role
 
         var (
                 emps []domain.Employee
@@ -36,6 +37,28 @@ func (h *Handler) ListEmployees(w http.ResponseWriter, r *http.Request) {
                 httpx.WriteErr(w, err)
                 return
         }
+
+        // Filter employees by evalType: MANAGER = has subordinates, EMPLOYEE = no subordinates.
+        if evalType != "" && len(emps) > 0 {
+                // Build a set of employee IDs that have subordinates (are managers).
+                managerIDs := map[string]bool{}
+                for _, emp := range emps {
+                        if emp.ManagerID != nil && *emp.ManagerID != "" {
+                                managerIDs[*emp.ManagerID] = true
+                        }
+                }
+
+                filtered := make([]domain.Employee, 0, len(emps))
+                for _, emp := range emps {
+                        if evalType == "MANAGER" && managerIDs[emp.ID] {
+                                filtered = append(filtered, emp)
+                        } else if evalType == "EMPLOYEE" && !managerIDs[emp.ID] {
+                                filtered = append(filtered, emp)
+                        }
+                }
+                emps = filtered
+        }
+
         httpx.JSON(w, http.StatusOK, emps)
 }
 
@@ -167,6 +190,16 @@ func (h *Handler) DeleteEmployee(w http.ResponseWriter, r *http.Request) {
                 return
         }
         id := chi.URLParam(r, "id")
+
+        // Prevent deleting ADMIN users.
+        var role *string
+        _ = h.Store.Pool().QueryRow(r.Context(),
+                `SELECT u.role FROM "User" u WHERE u."employeeId"=$1`, id).Scan(&role)
+        if role != nil && *role == "ADMIN" {
+                httpx.Error(w, http.StatusBadRequest, "لا يمكن حذف مدير النظام")
+                return
+        }
+
         deleted, err := h.Store.DeleteEmployee(r.Context(), id)
         if err != nil {
                 writeDBErr(w, err)

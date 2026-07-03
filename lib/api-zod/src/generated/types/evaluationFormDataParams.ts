@@ -8,4 +8,5 @@
 
 export type EvaluationFormDataParams = {
 employeeId: string;
+templateId?: string;
 };

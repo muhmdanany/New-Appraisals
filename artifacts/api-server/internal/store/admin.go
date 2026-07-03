@@ -68,9 +68,9 @@ WHERE id=$1`,
 	return ct.RowsAffected() > 0, nil
 }
 
-// DeactivateUser soft-deletes a user by setting isActive=false.
-func (s *Store) DeactivateUser(ctx context.Context, id string) (bool, error) {
-	ct, err := s.pool.Exec(ctx, `UPDATE "User" SET "isActive"=false, "updatedAt"=now() WHERE id=$1`, id)
+// DeleteUser permanently removes a user by id.
+func (s *Store) DeleteUser(ctx context.Context, id string) (bool, error) {
+	ct, err := s.pool.Exec(ctx, `DELETE FROM "User" WHERE id=$1`, id)
 	if err != nil {
 		return false, err
 	}

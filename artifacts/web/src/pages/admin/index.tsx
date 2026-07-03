@@ -34,7 +34,7 @@ import {
   Plus, Pencil, Trash2, CheckCircle, XCircle, Shield, Lock, Bell,
   ChevronDown, ChevronUp, ChevronLeft, Search, Copy, SlidersHorizontal,
   LayoutDashboard, Briefcase, Award, GraduationCap, Map, Target,
-  ClipboardCheck, FileBarChart, PieChart, Network, Mail, Loader2, Eye, EyeOff, Info, ExternalLink,
+  ClipboardCheck, FileBarChart, PieChart, Network, Mail, Loader2, Eye, EyeOff, Info, ExternalLink, FileText,
 } from "lucide-react";
 
 // --- API helpers ---
@@ -71,7 +71,7 @@ type EvalSettings = {
   defaultKpiWeight: number; defaultCompetencyWeight: number;
   ratingScale: number; ratingLabels: string[];
   evaluationPeriods: string[];
-  requireApproval: boolean; requireAcknowledgment: boolean;
+  requireApproval: boolean; requireAcknowledgment: boolean; allowObjection: boolean;
 };
 
 type ImportRow = {
@@ -115,8 +115,8 @@ function getSections(t: (key: string) => string): Section[] {
       title: t("admin.sections.systemSettings"),
       cards: [
         { id: "settings", icon: Settings, title: t("admin.cards.settings"), description: t("admin.cards.settingsDesc") },
-        { id: "field-options", icon: SlidersHorizontal, title: t("admin.cards.fieldOptions"), description: t("admin.cards.fieldOptionsDesc") },
         { id: "notifications", icon: Bell, title: "الإشعارات", description: "إعدادات البريد والواتساب وسجل الإشعارات" },
+        { id: "templates", icon: FileText, title: "نماذج التقييم", description: "إدارة نماذج وأسئلة التقييم" },
       ],
     },
   ];
@@ -128,12 +128,12 @@ function getViewTitles(t: (key: string) => string): Record<string, string> {
     permissions: t("admin.views.permissions"),
     import: t("admin.views.import"),
     settings: t("admin.views.settings"),
-    "field-options": t("admin.views.fieldOptions"),
     jobs: t("admin.views.jobs"),
     competencies: t("admin.views.competencies"),
     grades: t("admin.views.grades"),
     employees: t("admin.views.employees"),
     notifications: "الإشعارات",
+    templates: "نماذج التقييم",
   };
 }
 
@@ -209,8 +209,8 @@ export default function AdminPage() {
             {activeView === "permissions" && <PermissionsTab />}
 
             {activeView === "settings" && <SettingsTab />}
-            {activeView === "field-options" && <FieldSettingsTab />}
             {activeView === "notifications" && <NotificationsTab />}
+            {activeView === "templates" && <TemplatesTab />}
             {activeView === "jobs" && <Jobs />}
             {activeView === "competencies" && <Competencies />}
             {activeView === "grades" && <Grades />}
@@ -813,13 +813,8 @@ function UsersTab() {
     queryFn: () => apiFetch("/api/admin/users"),
   });
 
-  const { data: employees = [] } = useQuery<Employee[]>({
-    queryKey: ["employees"],
-    queryFn: () => apiFetch("/api/employees"),
-  });
-
   const saveMut = useMutation({
-    mutationFn: async (payload: { id?: string; name: string; email: string; role: string; isActive: boolean; employeeId: string | null }) => {
+    mutationFn: async (payload: { id?: string; name: string; email: string; role: string; isActive: boolean }) => {
       const { id, ...body } = payload;
       if (id) {
         return apiFetch(`/api/users/${id}`, { method: "PUT", body: JSON.stringify(body) });
@@ -835,14 +830,19 @@ function UsersTab() {
     onError: (e: any) => toast({ title: "خطأ", description: e.message, variant: "destructive" }),
   });
 
-  const deactivateMut = useMutation({
+  const deleteMut = useMutation({
     mutationFn: async (id: string) => apiFetch(`/api/users/${id}`, { method: "DELETE" }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin", "users"] });
-      toast({ title: "تم تعطيل المستخدم" });
+      toast({ title: "تم حذف المستخدم" });
     },
-    onError: (e: any) => toast({ title: "خطأ", description: e.message, variant: "destructive" }),
+    onError: (e: any) => {
+      let msg = e.message;
+      try { const parsed = JSON.parse(msg); msg = parsed.detail || parsed.title || msg; } catch {}
+      toast({ title: "خطأ", description: msg, variant: "destructive" });
+    },
   });
+  const [toDeleteUserId, setToDeleteUserId] = useState<string | null>(null);
 
   return (
     <div className="space-y-4">
@@ -868,13 +868,11 @@ function UsersTab() {
                   <TableHead>البريد</TableHead>
                   <TableHead>الدور</TableHead>
                   <TableHead>الحالة</TableHead>
-                  <TableHead>الموظف المرتبط</TableHead>
                   <TableHead className="w-24">إجراءات</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {users.map((u) => {
-                  const emp = employees.find((e) => e.id === u.employeeId);
                   return (
                     <TableRow key={u.id}>
                       <TableCell className="font-medium">{u.name}</TableCell>
@@ -895,16 +893,13 @@ function UsersTab() {
                           </Badge>
                         )}
                       </TableCell>
-                      <TableCell className="text-sm">
-                        {emp ? `${emp.name} (${emp.employeeNumber})` : "—"}
-                      </TableCell>
                       <TableCell>
                         <div className="flex gap-1">
                           <Button variant="ghost" size="icon" onClick={() => setEditUser(u)}>
                             <Pencil className="w-4 h-4" />
                           </Button>
-                          {u.isActive && (
-                            <Button variant="ghost" size="icon" onClick={() => deactivateMut.mutate(u.id)}>
+                          {u.role !== "ADMIN" && (
+                            <Button variant="ghost" size="icon" onClick={() => setToDeleteUserId(u.id)}>
                               <Trash2 className="w-4 h-4 text-destructive" />
                             </Button>
                           )}
@@ -922,21 +917,37 @@ function UsersTab() {
       <UserDialog
         open={!!editUser || newOpen}
         user={editUser}
-        employees={employees}
         onClose={() => { setEditUser(null); setNewOpen(false); }}
         onSave={(data) => saveMut.mutate(data)}
         saving={saveMut.isPending}
       />
+
+      <AlertDialog open={!!toDeleteUserId} onOpenChange={(o) => !o && setToDeleteUserId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>تأكيد الحذف</AlertDialogTitle>
+            <AlertDialogDescription>هل أنت متأكد من حذف هذا المستخدم؟ لا يمكن التراجع عن هذا الإجراء.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>إلغاء</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => { if (toDeleteUserId) deleteMut.mutate(toDeleteUserId); setToDeleteUserId(null); }}
+            >
+              حذف
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
 
 function UserDialog({
-  open, user, employees, onClose, onSave, saving,
+  open, user, onClose, onSave, saving,
 }: {
   open: boolean;
   user: User | null;
-  employees: Employee[];
   onClose: () => void;
   onSave: (data: any) => void;
   saving: boolean;
@@ -945,7 +956,6 @@ function UserDialog({
   const [email, setEmail] = useState("");
   const [role, setRole] = useState("EMPLOYEE");
   const [isActive, setIsActive] = useState(true);
-  const [employeeId, setEmployeeId] = useState<string | null>(null);
 
   const prevOpen = useRef(false);
   if (open && !prevOpen.current) {
@@ -954,9 +964,8 @@ function UserDialog({
       setEmail(user.email);
       setRole(user.role);
       setIsActive(user.isActive);
-      setEmployeeId(user.employeeId);
     } else {
-      setName(""); setEmail(""); setRole("EMPLOYEE"); setIsActive(true); setEmployeeId(null);
+      setName(""); setEmail(""); setRole("EMPLOYEE"); setIsActive(true);
     }
   }
   prevOpen.current = open;
@@ -989,22 +998,10 @@ function UserDialog({
               </SelectContent>
             </Select>
           </div>
-          <div>
-            <Label>الموظف المرتبط</Label>
-            <Select value={employeeId ?? "__none__"} onValueChange={(v) => setEmployeeId(v === "__none__" ? null : v)}>
-              <SelectTrigger><SelectValue placeholder="اختر موظف (اختياري)" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__none__">— بدون ربط —</SelectItem>
-                {employees.map((e) => (
-                  <SelectItem key={e.id} value={e.id}>{e.name} ({e.employeeNumber})</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
           <div className="flex items-center justify-between">
             <Label>الحالة</Label>
             <div className="flex items-center gap-3">
-              <Switch checked={isActive} onCheckedChange={setIsActive} />
+              <Switch checked={isActive} onCheckedChange={setIsActive} disabled={role === "ADMIN"} />
               <span className="text-sm text-muted-foreground">{isActive ? "نشط" : "معطل"}</span>
             </div>
           </div>
@@ -1012,7 +1009,7 @@ function UserDialog({
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>إلغاء</Button>
           <Button
-            onClick={() => onSave({ id: user?.id, name, email, role, isActive, employeeId })}
+            onClick={() => onSave({ id: user?.id, name, email, role, isActive })}
             disabled={saving || !name || !email}
           >
             {saving ? "جاري الحفظ..." : "حفظ"}
@@ -1118,10 +1115,9 @@ function SettingsTab() {
             >
               <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="3">3 درجات</SelectItem>
-                <SelectItem value="4">4 درجات</SelectItem>
-                <SelectItem value="5">5 درجات</SelectItem>
-                <SelectItem value="10">10 درجات</SelectItem>
+                {Array.from({ length: 15 }, (_, i) => i + 1).map((n) => (
+                  <SelectItem key={n} value={String(n)}>{n} {n === 1 ? "درجة" : "درجات"}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -1159,6 +1155,10 @@ function SettingsTab() {
           <div className="flex items-center justify-between">
             <Label>يتطلب إقرار الموظف</Label>
             <Switch checked={form.requireAcknowledgment} onCheckedChange={(v) => updateField("requireAcknowledgment", v)} />
+          </div>
+          <div className="flex items-center justify-between">
+            <Label>السماح بالاعتراض</Label>
+            <Switch checked={form.allowObjection} onCheckedChange={(v) => updateField("allowObjection", v)} />
           </div>
         </CardContent>
       </Card>
@@ -1769,12 +1769,24 @@ function RolesView() {
   const [editRole, setEditRole] = useState<string | null>(null);
   const [editLabel, setEditLabel] = useState("");
   const [roleToDelete, setRoleToDelete] = useState<string | null>(null);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
 
   const handleCopy = (role: string) => {
     const label = ROLE_LABELS[role] ?? role;
     toast({ title: "تم النسخ", description: `تم نسخ الدور: ${label} (${role})` });
     navigator.clipboard.writeText(role);
   };
+
+  const handleDelete = () => {
+    if (!roleToDelete) return;
+    const label = ROLE_LABELS[roleToDelete] ?? roleToDelete;
+    toast({ title: `تم حذف الدور: ${label}` });
+    setRoleToDelete(null);
+    setDeleteConfirmText("");
+  };
+
+  const deleteLabel = ROLE_LABELS[roleToDelete ?? ""] ?? roleToDelete ?? "";
+  const canConfirmDelete = deleteConfirmText === deleteLabel;
 
   return (
     <div className="space-y-4">
@@ -1800,16 +1812,12 @@ function RolesView() {
                 onClick={() => handleCopy(role)}>
                 <Copy className="w-3.5 h-3.5" />
               </Button>
-              <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" title="حذف"
-                onClick={() => {
-                  if (role === "ADMIN") {
-                    toast({ title: "لا يمكن حذف دور مدير النظام", variant: "destructive" });
-                  } else {
-                    setRoleToDelete(role);
-                  }
-                }}>
-                <Trash2 className="w-3.5 h-3.5" />
-              </Button>
+              {role !== "ADMIN" && (
+                <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" title="حذف"
+                  onClick={() => { setRoleToDelete(role); setDeleteConfirmText(""); }}>
+                  <Trash2 className="w-3.5 h-3.5" />
+                </Button>
+              )}
             </div>
           </div>
         ))}
@@ -1838,22 +1846,28 @@ function RolesView() {
         </DialogContent>
       </Dialog>
 
-      <AlertDialog open={!!roleToDelete} onOpenChange={(o) => !o && setRoleToDelete(null)}>
+      {/* Delete confirmation dialog */}
+      <AlertDialog open={!!roleToDelete} onOpenChange={(o) => { if (!o) { setRoleToDelete(null); setDeleteConfirmText(""); } }}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>حذف الدور</AlertDialogTitle>
-            <AlertDialogDescription>
-              هل أنت متأكد من حذف دور «{ROLE_LABELS[roleToDelete ?? ""] ?? roleToDelete}»؟ لا يمكن التراجع عن هذا الإجراء.
+            <AlertDialogDescription className="space-y-3">
+              <span>هل أنت متأكد من حذف دور <strong>«{deleteLabel}»</strong>؟ لا يمكن التراجع عن هذا الإجراء.</span>
+              <span className="block text-sm">اكتب <strong className="text-destructive">«{deleteLabel}»</strong> للتأكيد:</span>
             </AlertDialogDescription>
           </AlertDialogHeader>
+          <Input
+            value={deleteConfirmText}
+            onChange={(e) => setDeleteConfirmText(e.target.value)}
+            placeholder={deleteLabel}
+            className="text-center"
+          />
           <AlertDialogFooter className="gap-2">
-            <AlertDialogCancel>إلغاء</AlertDialogCancel>
+            <AlertDialogCancel onClick={() => setDeleteConfirmText("")}>إلغاء</AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => {
-                toast({ title: `تم حذف الدور: ${ROLE_LABELS[roleToDelete ?? ""] ?? roleToDelete}` });
-                setRoleToDelete(null);
-              }}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={!canConfirmDelete}
+              onClick={handleDelete}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90 disabled:opacity-50"
             >
               حذف
             </AlertDialogAction>
@@ -2208,6 +2222,335 @@ function NotificationsTab() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ============== TEMPLATES TAB ==============
+
+type EvalTemplateItem = { label: string; helpText?: string | null; sortOrder: number };
+type EvalTemplateGroup = { id?: string; name: string; weight: number; sortOrder: number; items: EvalTemplateItem[] };
+type EvalTemplate = { id: string; name: string; description: string; isDefault: boolean; evalType: string; groups: EvalTemplateGroup[]; createdAt: string };
+type TemplateSummary = { id: string; name: string; description: string; isDefault: boolean; evalType: string; groupCount: number; itemCount: number; createdAt: string };
+
+function TemplatesTab() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const { t } = useTranslation();
+  const [editing, setEditing] = useState<EvalTemplate | null>(null);
+  const [creating, setCreating] = useState(false);
+
+  const { data: templates = [], isLoading } = useQuery<TemplateSummary[]>({
+    queryKey: ["admin-templates"],
+    queryFn: () => apiFetch<TemplateSummary[]>("/api/admin/templates"),
+  });
+
+  const deleteMut = useMutation({
+    mutationFn: (id: string) => apiFetch(`/api/admin/templates/${id}`, { method: "DELETE" }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin-templates"] }); toast({ title: "تم الحذف" }); },
+  });
+
+  const dupMut = useMutation({
+    mutationFn: (id: string) => apiFetch(`/api/admin/templates/${id}/duplicate`, { method: "POST" }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin-templates"] }); toast({ title: "تم النسخ" }); },
+  });
+
+  const loadTemplate = async (id: string) => {
+    const t = await apiFetch<EvalTemplate>(`/api/admin/templates/${id}`);
+    setEditing(t);
+  };
+
+  if (creating || editing) {
+    return (
+      <TemplateEditor
+        initial={editing}
+        onSaved={() => { setEditing(null); setCreating(false); qc.invalidateQueries({ queryKey: ["admin-templates"] }); }}
+        onCancel={() => { setEditing(null); setCreating(false); }}
+      />
+    );
+  }
+
+  if (isLoading) return <Skeleton className="h-40 w-full" />;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-between items-center">
+        <p className="text-sm text-muted-foreground">{templates.length} نموذج</p>
+        <Button size="sm" onClick={() => setCreating(true)}>
+          <Plus className="w-4 h-4 ml-1" />
+          إنشاء نموذج جديد
+        </Button>
+      </div>
+
+      {templates.length === 0 && (
+        <div className="text-center py-12 text-muted-foreground">
+          <FileText className="w-10 h-10 mx-auto mb-3 opacity-50" />
+          <p>لا توجد نماذج بعد</p>
+          <p className="text-xs mt-1">أنشئ نموذج تقييم لتحديد الأسئلة والمجموعات</p>
+        </div>
+      )}
+
+      <div className="space-y-2">
+        {templates.map((tpl) => (
+          <Card key={tpl.id} className="hover:shadow-sm transition-shadow">
+            <CardContent className="py-3 px-4 flex items-center justify-between gap-3">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <h4 className="font-semibold text-sm">{tpl.name}</h4>
+                  {tpl.isDefault && <Badge variant="secondary" className="text-xs">افتراضي</Badge>}
+                  <Badge variant="outline" className="text-xs">{tpl.evalType === "MANAGER" ? t("evaluations.evalTypeManager") : t("evaluations.evalTypeEmployee")}</Badge>
+                </div>
+                {tpl.description && <p className="text-xs text-muted-foreground mt-0.5 truncate">{tpl.description}</p>}
+                <p className="text-xs text-muted-foreground mt-1">{tpl.groupCount} مجموعة · {tpl.itemCount} سؤال</p>
+              </div>
+              <div className="flex gap-1 shrink-0">
+                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => loadTemplate(tpl.id)} title="تعديل">
+                  <Pencil className="w-3.5 h-3.5" />
+                </Button>
+                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => dupMut.mutate(tpl.id)} title="نسخ">
+                  <Copy className="w-3.5 h-3.5" />
+                </Button>
+                <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => deleteMut.mutate(tpl.id)} title="حذف">
+                  <Trash2 className="w-3.5 h-3.5" />
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ============== TEMPLATE EDITOR ==============
+
+function TemplateEditor({ initial, onSaved, onCancel }: { initial: EvalTemplate | null; onSaved: () => void; onCancel: () => void }) {
+  const { toast } = useToast();
+  const { t } = useTranslation();
+  const [name, setName] = useState(initial?.name ?? "");
+  const [description, setDescription] = useState(initial?.description ?? "");
+  const [isDefault, setIsDefault] = useState(initial?.isDefault ?? false);
+  const [evalType, setEvalType] = useState<string>(initial?.evalType ?? "EMPLOYEE");
+  const [groups, setGroups] = useState<EvalTemplateGroup[]>(
+    initial?.groups?.length ? initial.groups : [{ name: "", weight: 0, sortOrder: 0, items: [{ label: "", sortOrder: 0 }] }],
+  );
+  const [saving, setSaving] = useState(false);
+
+  const updateGroup = (idx: number, patch: Partial<EvalTemplateGroup>) => {
+    setGroups((gs) => gs.map((g, i) => (i === idx ? { ...g, ...patch } : g)));
+  };
+
+  const addGroup = () => {
+    setGroups((gs) => [...gs, { name: "", weight: 0, sortOrder: gs.length, items: [{ label: "", sortOrder: 0 }] }]);
+  };
+
+  const removeGroup = (idx: number) => {
+    setGroups((gs) => gs.filter((_, i) => i !== idx));
+  };
+
+  const moveGroup = (idx: number, dir: -1 | 1) => {
+    setGroups((gs) => {
+      const arr = [...gs];
+      const target = idx + dir;
+      if (target < 0 || target >= arr.length) return arr;
+      [arr[idx], arr[target]] = [arr[target], arr[idx]];
+      return arr.map((g, i) => ({ ...g, sortOrder: i }));
+    });
+  };
+
+  const updateItem = (gIdx: number, iIdx: number, patch: Partial<EvalTemplateItem>) => {
+    setGroups((gs) =>
+      gs.map((g, gi) =>
+        gi === gIdx ? { ...g, items: g.items.map((it, ii) => (ii === iIdx ? { ...it, ...patch } : it)) } : g,
+      ),
+    );
+  };
+
+  const addItem = (gIdx: number) => {
+    setGroups((gs) =>
+      gs.map((g, gi) =>
+        gi === gIdx ? { ...g, items: [...g.items, { label: "", sortOrder: g.items.length }] } : g,
+      ),
+    );
+  };
+
+  const removeItem = (gIdx: number, iIdx: number) => {
+    setGroups((gs) =>
+      gs.map((g, gi) =>
+        gi === gIdx ? { ...g, items: g.items.filter((_, ii) => ii !== iIdx) } : g,
+      ),
+    );
+  };
+
+  const handleSave = async () => {
+    if (!name.trim()) {
+      toast({ title: "يرجى إدخال اسم النموذج", variant: "destructive" });
+      return;
+    }
+    const emptyGroup = groups.find((g) => !g.name.trim());
+    if (emptyGroup) {
+      toast({ title: "يرجى تسمية جميع المجموعات", variant: "destructive" });
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const payload = {
+        name: name.trim(),
+        description: description.trim(),
+        isDefault,
+        evalType,
+        groups: groups.map((g, gi) => ({
+          name: g.name.trim(),
+          weight: g.weight,
+          sortOrder: gi,
+          items: g.items.filter((it) => it.label.trim()).map((it, ii) => ({
+            label: it.label.trim(),
+            helpText: it.helpText || null,
+            sortOrder: ii,
+          })),
+        })),
+      };
+
+      if (initial?.id) {
+        await apiFetch(`/api/admin/templates/${initial.id}`, { method: "PUT", body: JSON.stringify(payload) });
+        toast({ title: "تم تحديث النموذج" });
+      } else {
+        await apiFetch("/api/admin/templates", { method: "POST", body: JSON.stringify(payload) });
+        toast({ title: "تم إنشاء النموذج" });
+      }
+      onSaved();
+    } catch {
+      toast({ title: "حدث خطأ", variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <Button variant="ghost" size="sm" onClick={onCancel}>
+          <ChevronLeft className="w-4 h-4 ml-1" />
+          رجوع
+        </Button>
+        <h3 className="text-lg font-semibold">{initial ? "تعديل النموذج" : "نموذج جديد"}</h3>
+      </div>
+
+      {/* Basic info */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div>
+          <Label className="text-xs mb-1 block">اسم النموذج *</Label>
+          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="مثال: نموذج الموظفين العاديين" />
+        </div>
+        <div>
+          <Label className="text-xs mb-1 block">الوصف</Label>
+          <Input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="وصف اختياري" />
+        </div>
+      </div>
+      <div className="flex items-center gap-2">
+        <Switch checked={isDefault} onCheckedChange={setIsDefault} id="tpl-default" />
+        <Label htmlFor="tpl-default" className="text-sm">نموذج افتراضي</Label>
+      </div>
+
+      {/* Evaluation type */}
+      <div>
+        <Label className="text-xs mb-1.5 block">{t("evaluations.selectEvalType")}</Label>
+        <div className="flex gap-3">
+          <button
+            type="button"
+            onClick={() => setEvalType("EMPLOYEE")}
+            className={`flex-1 rounded-lg border-2 p-2.5 text-sm font-medium transition-colors ${
+              evalType === "EMPLOYEE" ? "border-primary bg-primary/10 text-primary" : "border-border hover:border-primary/40"
+            }`}
+          >
+            {t("evaluations.evalTypeEmployee")}
+          </button>
+          <button
+            type="button"
+            onClick={() => setEvalType("MANAGER")}
+            className={`flex-1 rounded-lg border-2 p-2.5 text-sm font-medium transition-colors ${
+              evalType === "MANAGER" ? "border-primary bg-primary/10 text-primary" : "border-border hover:border-primary/40"
+            }`}
+          >
+            {t("evaluations.evalTypeManager")}
+          </button>
+        </div>
+      </div>
+
+      {/* Groups */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h4 className="font-semibold text-sm">المجموعات</h4>
+          <Button variant="outline" size="sm" onClick={addGroup}>
+            <Plus className="w-3.5 h-3.5 ml-1" />
+            إضافة مجموعة
+          </Button>
+        </div>
+
+        {groups.map((group, gIdx) => (
+          <Card key={gIdx} className="border">
+            <CardContent className="py-3 px-4 space-y-2">
+              <div className="flex items-center gap-2">
+                <Input
+                  className="flex-1 font-semibold text-sm"
+                  value={group.name}
+                  onChange={(e) => updateGroup(gIdx, { name: e.target.value })}
+                  placeholder="اسم المجموعة (مثال: جدارات سلوكية)"
+                />
+                <div className="flex gap-0.5 shrink-0">
+                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => moveGroup(gIdx, -1)} disabled={gIdx === 0}>
+                    <ChevronUp className="w-3.5 h-3.5" />
+                  </Button>
+                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => moveGroup(gIdx, 1)} disabled={gIdx === groups.length - 1}>
+                    <ChevronDown className="w-3.5 h-3.5" />
+                  </Button>
+                  <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => removeGroup(gIdx)} disabled={groups.length <= 1}>
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </Button>
+                </div>
+              </div>
+
+              {/* Items */}
+              <div className="space-y-1.5 mr-4">
+                {group.items.map((item, iIdx) => (
+                  <div key={iIdx} className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground w-5 shrink-0">{iIdx + 1}.</span>
+                    <Input
+                      className="flex-1 text-sm h-8"
+                      value={item.label}
+                      onChange={(e) => updateItem(gIdx, iIdx, { label: e.target.value })}
+                      placeholder="نص السؤال / المعيار"
+                    />
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 text-destructive shrink-0"
+                      onClick={() => removeItem(gIdx, iIdx)}
+                      disabled={group.items.length <= 1}
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </Button>
+                  </div>
+                ))}
+                <Button variant="ghost" size="sm" className="text-xs h-7" onClick={() => addItem(gIdx)}>
+                  <Plus className="w-3 h-3 ml-1" />
+                  إضافة سؤال
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {/* Save */}
+      <div className="flex justify-end gap-2 pt-2">
+        <Button variant="outline" onClick={onCancel}>إلغاء</Button>
+        <Button onClick={handleSave} disabled={saving}>
+          {saving && <Loader2 className="w-4 h-4 ml-1 animate-spin" />}
+          حفظ
+        </Button>
+      </div>
     </div>
   );
 }

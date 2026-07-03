@@ -46,6 +46,7 @@ export function FormDialog({
   children,
   wide,
   canSubmit = true,
+  footerExtra,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -57,6 +58,7 @@ export function FormDialog({
   children: ReactNode;
   wide?: boolean;
   canSubmit?: boolean;
+  footerExtra?: ReactNode;
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -80,6 +82,7 @@ export function FormDialog({
         >
           {children}
           <DialogFooter className="gap-2 sm:gap-2">
+            {footerExtra}
             <Button
               type="button"
               variant="outline"

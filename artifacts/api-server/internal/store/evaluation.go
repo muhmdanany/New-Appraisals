@@ -28,6 +28,8 @@ type EvaluationSave struct {
 	SharedScores map[string]float64 `json:"sharedScores"`
 	JobScores    map[string]float64 `json:"jobScores"`
 	Kpis         []EvalKpiInput     `json:"kpis"`
+	TemplateID   *string            `json:"templateId"`
+	EvalType     string             `json:"evalType"`
 }
 
 type evalItem struct {
@@ -190,13 +192,17 @@ func (s *Store) CreateEvaluation(ctx context.Context, evaluatorID, employeeID st
 	defer tx.Rollback(ctx)
 
 	id := NewID()
+	evalType := in.EvalType
+	if evalType == "" {
+		evalType = "EMPLOYEE"
+	}
 	_, err = tx.Exec(ctx, `
 		INSERT INTO "Evaluation" (id, "employeeId", "jobId", "evaluatorId", period, mode,
 			"kpiWeight", "competencyWeight", "kpiScore", "competencyScore", "totalScore", "ratingLabel",
-			status, "employeeAck", "createdAt", "updatedAt")
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'DRAFT',false, now(), now())`,
+			status, "employeeAck", "templateId", eval_type, "createdAt", "updatedAt")
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'DRAFT',false,$13,$14, now(), now())`,
 		id, employeeID, jobID, evaluatorID, in.Period, in.Mode,
-		in.KpiWeight, 100-in.KpiWeight, res.KpiScore, res.CompetencyScore, res.TotalScore, res.RatingLabel)
+		in.KpiWeight, 100-in.KpiWeight, res.KpiScore, res.CompetencyScore, res.TotalScore, res.RatingLabel, in.TemplateID, evalType)
 	if err != nil {
 		return "", err
 	}
@@ -346,7 +352,7 @@ func (s *Store) ListEvaluations(ctx context.Context, f EvalListFilter) ([]domain
 	q := `
 		SELECT e.id, e."employeeId", e."jobId", e."evaluatorId", e."approverId", e.period, e.mode,
 			e."kpiWeight", e."competencyWeight", e."kpiScore", e."competencyScore", e."totalScore", e."ratingLabel",
-			e.status, e."approvedAt", e."rejectionReason", e."employeeAck", e."objectionNote", e."createdAt", e."updatedAt",
+			e.status, e."approvedAt", e."rejectionReason", e."employeeAck", e."objectionNote", COALESCE(e.eval_type,'EMPLOYEE'), e."createdAt", e."updatedAt",
 			emp.name, u.name
 		FROM "Evaluation" e
 		LEFT JOIN "Employee" emp ON emp.id = e."employeeId"
@@ -385,7 +391,7 @@ func (s *Store) ListEvaluations(ctx context.Context, f EvalListFilter) ([]domain
 		var e domain.Evaluation
 		if err := rows.Scan(&e.ID, &e.EmployeeID, &e.JobID, &e.EvaluatorID, &e.ApproverID, &e.Period, &e.Mode,
 			&e.KpiWeight, &e.CompetencyWeight, &e.KpiScore, &e.CompetencyScore, &e.TotalScore, &e.RatingLabel,
-			&e.Status, &e.ApprovedAt, &e.RejectionReason, &e.EmployeeAck, &e.ObjectionNote, &e.CreatedAt, &e.UpdatedAt,
+			&e.Status, &e.ApprovedAt, &e.RejectionReason, &e.EmployeeAck, &e.ObjectionNote, &e.EvalType, &e.CreatedAt, &e.UpdatedAt,
 			&e.EmployeeName, &e.EvaluatorName); err != nil {
 			return nil, err
 		}
@@ -400,7 +406,7 @@ func (s *Store) EvaluationByID(ctx context.Context, id string) (*domain.Evaluati
 	row := s.pool.QueryRow(ctx, `
 		SELECT e.id, e."employeeId", e."jobId", e."evaluatorId", e."approverId", e.period, e.mode,
 			e."kpiWeight", e."competencyWeight", e."kpiScore", e."competencyScore", e."totalScore", e."ratingLabel",
-			e.status, e."approvedAt", e."rejectionReason", e."employeeAck", e."objectionNote", e."createdAt", e."updatedAt",
+			e.status, e."approvedAt", e."rejectionReason", e."employeeAck", e."objectionNote", e."templateId", COALESCE(e.eval_type,'EMPLOYEE'), e."createdAt", e."updatedAt",
 			emp.name, u.name
 		FROM "Evaluation" e
 		LEFT JOIN "Employee" emp ON emp.id = e."employeeId"
@@ -408,7 +414,7 @@ func (s *Store) EvaluationByID(ctx context.Context, id string) (*domain.Evaluati
 		WHERE e.id = $1`, id)
 	if err := row.Scan(&e.ID, &e.EmployeeID, &e.JobID, &e.EvaluatorID, &e.ApproverID, &e.Period, &e.Mode,
 		&e.KpiWeight, &e.CompetencyWeight, &e.KpiScore, &e.CompetencyScore, &e.TotalScore, &e.RatingLabel,
-		&e.Status, &e.ApprovedAt, &e.RejectionReason, &e.EmployeeAck, &e.ObjectionNote, &e.CreatedAt, &e.UpdatedAt,
+		&e.Status, &e.ApprovedAt, &e.RejectionReason, &e.EmployeeAck, &e.ObjectionNote, &e.TemplateID, &e.EvalType, &e.CreatedAt, &e.UpdatedAt,
 		&e.EmployeeName, &e.EvaluatorName); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil

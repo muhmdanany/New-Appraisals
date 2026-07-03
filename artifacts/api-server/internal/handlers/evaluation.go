@@ -557,7 +557,7 @@ func (h *Handler) EvaluationFormData(w http.ResponseWriter, r *http.Request) {
                         return
                 }
         }
-        data, err := h.Store.EvaluationFormData(r.Context(), employeeID)
+        data, err := h.Store.EvaluationFormData(r.Context(), employeeID, qStr(r, "templateId"))
         if err != nil {
                 httpx.WriteErr(w, err)
                 return

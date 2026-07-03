@@ -66,13 +66,18 @@ export default function Employees() {
   const create = useCreateEmployee();
   const update = useUpdateEmployee();
   const deleteMut = useMutation({
-    mutationFn: (id: string) =>
-      fetch(`/api/employees/${id}`, {
+    mutationFn: async (id: string) => {
+      const r = await fetch(`/api/employees/${id}`, {
         method: "DELETE",
         headers: { "X-User-Id": localStorage.getItem("selectedUserId") ?? "" },
-      }).then((r) => { if (!r.ok) throw new Error("Delete failed"); }),
+      });
+      if (!r.ok) {
+        const body = await r.json().catch(() => null);
+        throw new Error(body?.error || "Delete failed");
+      }
+    },
     onSuccess: () => { qc.invalidateQueries({ queryKey: getListEmployeesQueryKey() }); toast({ title: t("employees.deleted") }); },
-    onError: () => toast({ title: t("employees.deleteFailed"), variant: "destructive" }),
+    onError: (err: Error) => toast({ title: err.message || t("employees.deleteFailed"), variant: "destructive" }),
   });
 
   const [open, setOpen] = useState(false);

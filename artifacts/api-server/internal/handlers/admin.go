@@ -77,10 +77,20 @@ func (h *Handler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	httpx.JSON(w, http.StatusOK, u)
 }
 
-// DeactivateUser handles DELETE /api/users/{id} (soft delete).
-func (h *Handler) DeactivateUser(w http.ResponseWriter, r *http.Request) {
+// DeleteUser handles DELETE /api/users/{id}.
+func (h *Handler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	ok, err := h.Store.DeactivateUser(r.Context(), id)
+
+	// Prevent deleting ADMIN users.
+	var role *string
+	_ = h.Store.Pool().QueryRow(r.Context(),
+		`SELECT role FROM "User" WHERE id=$1`, id).Scan(&role)
+	if role != nil && *role == "ADMIN" {
+		httpx.Error(w, http.StatusBadRequest, "لا يمكن حذف مدير النظام")
+		return
+	}
+
+	ok, err := h.Store.DeleteUser(r.Context(), id)
 	if err != nil {
 		httpx.WriteErr(w, err)
 		return
@@ -89,7 +99,7 @@ func (h *Handler) DeactivateUser(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, http.StatusNotFound, "المستخدم غير موجود")
 		return
 	}
-	h.audit(r, "user.deactivate", "User", &id)
+	h.audit(r, "user.delete", "User", &id)
 	httpx.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
@@ -204,6 +214,7 @@ type evaluationSettings struct {
 	EvaluationPeriods       []string `json:"evaluationPeriods"`
 	RequireApproval         bool     `json:"requireApproval"`
 	RequireAcknowledgment   bool     `json:"requireAcknowledgment"`
+	AllowObjection          bool     `json:"allowObjection"`
 }
 
 var defaultEvalSettings = evaluationSettings{
@@ -214,6 +225,7 @@ var defaultEvalSettings = evaluationSettings{
 	EvaluationPeriods:       []string{"2026", "النصف الأول 2026", "النصف الثاني 2026"},
 	RequireApproval:         true,
 	RequireAcknowledgment:   true,
+	AllowObjection:          true,
 }
 
 // GetEvaluationSettings handles GET /api/settings/evaluation.

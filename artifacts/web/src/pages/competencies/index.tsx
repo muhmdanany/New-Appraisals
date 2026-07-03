@@ -34,8 +34,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Pencil, Trash2, Sparkles, Loader2, Upload } from "lucide-react";
+import { Plus, Pencil, Trash2, Sparkles, Loader2, Upload, Settings2, X, Eye, EyeOff } from "lucide-react";
 import { FormDialog, TextField, TextAreaField, SelectField, useCanManage } from "@/components/form-fields";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const FALLBACK_TYPES = [
   { value: "BEHAVIORAL", label: "سلوكية" },
@@ -49,21 +52,156 @@ const FALLBACK_LEVELS = [
   { value: "EXPERT", label: "خبير" },
 ];
 
+type FieldOption = { value: string; label: string; active: boolean };
+
 function useFieldOptions() {
-  const [types, setTypes] = useState(FALLBACK_TYPES);
-  const [levels, setLevels] = useState(FALLBACK_LEVELS);
-  useEffect(() => {
-    fetch("/api/settings/field-options", { credentials: "include" })
+  const [allTypes, setAllTypes] = useState<FieldOption[]>([]);
+  const [allLevels, setAllLevels] = useState<FieldOption[]>([]);
+  const [loaded, setLoaded] = useState(false);
+
+  const load = () => {
+    const uid = localStorage.getItem("selectedUserId");
+    const h: Record<string, string> = {};
+    if (uid) h["X-User-Id"] = uid;
+    fetch("/api/settings/field-options", { headers: h })
       .then((r) => r.json())
       .then((data) => {
-        if (data.competencyTypes?.length)
-          setTypes(data.competencyTypes.filter((o: any) => o.active).map((o: any) => ({ value: o.value, label: o.label })));
-        if (data.competencyLevels?.length)
-          setLevels(data.competencyLevels.filter((o: any) => o.active).map((o: any) => ({ value: o.value, label: o.label })));
+        if (data.competencyTypes?.length) setAllTypes(data.competencyTypes);
+        else setAllTypes(FALLBACK_TYPES.map((o) => ({ ...o, active: true })));
+        if (data.competencyLevels?.length) setAllLevels(data.competencyLevels);
+        else setAllLevels(FALLBACK_LEVELS.map((o) => ({ ...o, active: true })));
+        setLoaded(true);
       })
-      .catch(() => {});
-  }, []);
-  return { types, levels };
+      .catch(() => {
+        setAllTypes(FALLBACK_TYPES.map((o) => ({ ...o, active: true })));
+        setAllLevels(FALLBACK_LEVELS.map((o) => ({ ...o, active: true })));
+        setLoaded(true);
+      });
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const save = async (newTypes: FieldOption[], newLevels: FieldOption[]) => {
+    const uid = localStorage.getItem("selectedUserId");
+    const h: Record<string, string> = { "Content-Type": "application/json" };
+    if (uid) h["X-User-Id"] = uid;
+    await fetch("/api/settings/field-options", {
+      method: "PUT",
+      headers: h,
+      body: JSON.stringify({ competencyTypes: newTypes, competencyLevels: newLevels }),
+    });
+  };
+
+  const types = allTypes.filter((o) => o.active);
+  const levels = allLevels.filter((o) => o.active);
+
+  const updateTypes = async (newTypes: FieldOption[]) => {
+    setAllTypes(newTypes);
+    await save(newTypes, allLevels);
+  };
+  const updateLevels = async (newLevels: FieldOption[]) => {
+    setAllLevels(newLevels);
+    await save(allTypes, newLevels);
+  };
+
+  return { types, levels, allTypes, allLevels, updateTypes, updateLevels, loaded };
+}
+
+/* ── Inline-manageable select field ── */
+function ManageableSelect({
+  label,
+  value,
+  onChange,
+  allOptions,
+  onUpdateOptions,
+  required,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  allOptions: FieldOption[];
+  onUpdateOptions: (opts: FieldOption[]) => void;
+  required?: boolean;
+}) {
+  const [managing, setManaging] = useState(false);
+  const [newLabel, setNewLabel] = useState("");
+  const activeOptions = allOptions.filter((o) => o.active);
+
+  const addOption = () => {
+    const trimmed = newLabel.trim();
+    if (!trimmed) return;
+    const val = trimmed.toUpperCase().replace(/\s+/g, "_");
+    if (allOptions.some((o) => o.value === val)) return;
+    onUpdateOptions([...allOptions, { value: val, label: trimmed, active: true }]);
+    setNewLabel("");
+  };
+
+  const toggleOption = (val: string) => {
+    onUpdateOptions(allOptions.map((o) => o.value === val ? { ...o, active: !o.active } : o));
+  };
+
+  const removeOption = (val: string) => {
+    onUpdateOptions(allOptions.filter((o) => o.value !== val));
+  };
+
+  if (managing) {
+    return (
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between">
+          <Label>{label} {required && <span className="text-destructive">*</span>}</Label>
+          <Button type="button" variant="ghost" size="sm" onClick={() => setManaging(false)}>
+            <X className="w-3.5 h-3.5" />
+          </Button>
+        </div>
+        <div className="rounded-md border border-border p-2 space-y-1.5 max-h-48 overflow-y-auto">
+          {allOptions.map((opt) => (
+            <div key={opt.value} className="flex items-center justify-between gap-2 py-1 px-2 rounded hover:bg-muted/50">
+              <span className={`text-sm ${!opt.active ? "text-muted-foreground line-through" : ""}`}>{opt.label}</span>
+              <div className="flex items-center gap-1">
+                <button type="button" onClick={() => toggleOption(opt.value)} className="p-1 rounded hover:bg-muted" title={opt.active ? "إخفاء" : "إظهار"}>
+                  {opt.active ? <Eye className="w-3.5 h-3.5 text-green-600" /> : <EyeOff className="w-3.5 h-3.5 text-muted-foreground" />}
+                </button>
+                <button type="button" onClick={() => removeOption(opt.value)} className="p-1 rounded hover:bg-destructive/10">
+                  <Trash2 className="w-3.5 h-3.5 text-destructive" />
+                </button>
+              </div>
+            </div>
+          ))}
+          <div className="flex gap-1.5 pt-1">
+            <Input
+              value={newLabel}
+              onChange={(e) => setNewLabel(e.target.value)}
+              placeholder="اسم الخيار الجديد..."
+              className="h-8 text-sm"
+              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addOption(); } }}
+            />
+            <Button type="button" variant="outline" size="sm" className="h-8 px-2" onClick={addOption} disabled={!newLabel.trim()}>
+              <Plus className="w-3.5 h-3.5" />
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between">
+        <Label>{label} {required && <span className="text-destructive">*</span>}</Label>
+        <button type="button" onClick={() => setManaging(true)} className="text-muted-foreground hover:text-foreground transition-colors" title="إدارة الخيارات">
+          <Settings2 className="w-4 h-4" />
+        </button>
+      </div>
+      <Select value={value === "" ? undefined : value} onValueChange={onChange}>
+        <SelectTrigger><SelectValue placeholder="اختر..." /></SelectTrigger>
+        <SelectContent>
+          {activeOptions.map((o) => (
+            <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
 }
 
 type Row = { id: string; name: string; type: string; level: string; description?: string | null; indicators?: string | null };
@@ -78,7 +216,7 @@ export default function Competencies() {
   const { t } = useTranslation();
   const importMut = useImportCompetencies();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { types: TYPE_OPTIONS, levels: LEVEL_OPTIONS } = useFieldOptions();
+  const { types: TYPE_OPTIONS, levels: LEVEL_OPTIONS, allTypes, allLevels, updateTypes, updateLevels } = useFieldOptions();
   const typeLabel = (v: string) => TYPE_OPTIONS.find((o) => o.value === v)?.label ?? v;
   const levelLabel = (l: string) => LEVEL_OPTIONS.find((o) => o.value === l)?.label ?? l;
 
@@ -253,18 +391,20 @@ export default function Competencies() {
         submitting={create.isPending || update.isPending}
       >
         <TextField label={t("common.name")} value={form.name} onChange={(v) => setForm({ ...form, name: v })} required />
-        <SelectField
+        <ManageableSelect
           label={t("competencies.type")}
           value={form.type}
           onChange={(v) => setForm({ ...form, type: v })}
-          options={TYPE_OPTIONS}
+          allOptions={allTypes}
+          onUpdateOptions={updateTypes}
           required
         />
-        <SelectField
+        <ManageableSelect
           label={t("competencies.level")}
           value={form.level}
           onChange={(v) => setForm({ ...form, level: v })}
-          options={LEVEL_OPTIONS}
+          allOptions={allLevels}
+          onUpdateOptions={updateLevels}
         />
         <TextAreaField label={t("common.description")} value={form.description} onChange={(v) => setForm({ ...form, description: v })} />
         <TextAreaField

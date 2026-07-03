@@ -42,6 +42,10 @@ func main() {
         if err := st.EnsureNotificationTable(ctx); err != nil {
                 logger.Error("notification table init failed", "err", err)
         }
+        // Ensure eval template tables exist.
+        if err := st.EnsureEvalTemplateTable(ctx); err != nil {
+                logger.Error("eval template table init failed", "err", err)
+        }
 
         // Start background notification scheduler.
         h.Notifier.StartScheduler(ctx)

@@ -23,6 +23,16 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogCancel,
+  AlertDialogAction,
+} from "@/components/ui/alert-dialog";
+import {
   FormDialog,
   TextField,
   TextAreaField,
@@ -82,6 +92,7 @@ export default function Jobs() {
   const [editing, setEditing] = useState<Row | null>(null);
   const [form, setForm] = useState(empty);
   const [profileJob, setProfileJob] = useState<Row | null>(null);
+  const [toDeleteId, setToDeleteId] = useState<string | null>(null);
 
   const openCreate = () => {
     setEditing(null);
@@ -177,7 +188,7 @@ export default function Jobs() {
                           </Button>
                         )}
                         {canManage && (
-                          <Button variant="ghost" size="icon" onClick={() => { if (confirm(t("jobs.confirmDelete"))) deleteMut.mutate(job.id); }}>
+                          <Button variant="ghost" size="icon" onClick={() => setToDeleteId(job.id)}>
                             <Trash2 className="w-4 h-4 text-destructive" />
                           </Button>
                         )}
@@ -294,6 +305,27 @@ export default function Jobs() {
           })()}
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={!!toDeleteId} onOpenChange={(o) => !o && setToDeleteId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("common.confirmDelete")}</AlertDialogTitle>
+            <AlertDialogDescription>{t("jobs.confirmDelete")}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (toDeleteId) deleteMut.mutate(toDeleteId);
+                setToDeleteId(null);
+              }}
+            >
+              {t("common.delete")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

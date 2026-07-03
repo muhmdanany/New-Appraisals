@@ -504,6 +504,7 @@ export interface Evaluation {
   employeeName?: string | null;
   /** @nullable */
   evaluatorName?: string | null;
+  evalType?: string;
 }
 
 export interface EvaluationKpiInput {
@@ -525,6 +526,8 @@ export interface EvaluationInput {
   sharedScores?: EvaluationInputSharedScores;
   jobScores?: EvaluationInputJobScores;
   kpis?: EvaluationKpiInput[];
+  templateId?: string;
+  evalType?: string;
 }
 
 export type EvaluationUpdateSharedScores = {[key: string]: number};
@@ -686,6 +689,7 @@ status?: string;
 
 export type EvaluationFormDataParams = {
 employeeId: string;
+templateId?: string;
 };
 
 export type DepartmentDistributionParams = {

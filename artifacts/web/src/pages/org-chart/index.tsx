@@ -1,9 +1,23 @@
-import { useState } from "react";
+import { useState, useRef, useCallback } from "react";
 import { useReportOrgTree } from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "@/lib/i18n";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ChevronDown, ChevronLeft, User, Users } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { useToast } from "@/hooks/use-toast";
+import { ChevronDown, ChevronLeft, User, Users, Upload, Download, Loader2 } from "lucide-react";
+import { parseSpreadsheet, pick, mapRole, downloadOrgTemplate } from "@/lib/xlsx";
+
+const apiFetch = async <T,>(url: string, init?: RequestInit): Promise<T> => {
+  const uid = localStorage.getItem("selectedUserId");
+  const h: Record<string, string> = { "Content-Type": "application/json", ...init?.headers as Record<string, string> };
+  if (uid) h["X-User-Id"] = uid;
+  const res = await fetch(url, { ...init, headers: h });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+};
 
 type OrgNode = {
   id: string;
@@ -84,15 +98,121 @@ function TreeNodeCard({ node, level = 0 }: { node: TreeNode; level?: number }) {
   );
 }
 
+// ========== Import Dialog ==========
+
+function ImportOrgDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [file, setFile] = useState<File | null>(null);
+  const [importing, setImporting] = useState(false);
+
+  const handleFile = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (f) setFile(f);
+  }, []);
+
+  const doImport = async () => {
+    if (!file) return;
+    setImporting(true);
+    try {
+      const raw = await parseSpreadsheet(file);
+      const rows = raw
+        .map((r) => ({
+          employeeNumber: pick(r, "الرقم الوظيفي", "employeeNumber", "رقم الموظف"),
+          name: pick(r, "الاسم", "name", "اسم الموظف"),
+          email: pick(r, "البريد الإلكتروني", "email", "البريد"),
+          role: mapRole(pick(r, "الدور", "role", "الصلاحية")),
+          managerNumber: pick(r, "رقم المدير", "managerNumber", "المدير"),
+        }))
+        .filter((r) => r.employeeNumber && r.name);
+
+      if (rows.length === 0) {
+        toast({ title: "لا توجد بيانات صالحة", description: "تأكد من تعبئة الأعمدة المطلوبة.", variant: "destructive" });
+        setImporting(false);
+        return;
+      }
+
+      const res = await apiFetch<{ imported: number; usersCreated: number }>(
+        "/api/admin/import-with-roles",
+        { method: "POST", body: JSON.stringify({ rows }) },
+      );
+      toast({ title: "تم الاستيراد بنجاح", description: `${res.imported} موظف، ${res.usersCreated} حساب مستخدم` });
+      qc.invalidateQueries({ queryKey: ["/api/reports/org-tree"] });
+      setFile(null);
+      onClose();
+    } catch (e: any) {
+      toast({ title: "خطأ في الاستيراد", description: e.message, variant: "destructive" });
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => { if (!o) { onClose(); setFile(null); } }}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>استيراد الهيكل التنظيمي</DialogTitle>
+          <p className="text-sm text-muted-foreground">حمّل القالب أولاً، عبّئه ببيانات الإدارات، ثم اختر الملف من جهازك لبدء الاستيراد.</p>
+        </DialogHeader>
+
+        <div className="space-y-4 py-2">
+          {/* Step 1 */}
+          <div className="rounded-lg border p-4 space-y-2">
+            <h3 className="font-bold text-sm">1) تحميل القالب</h3>
+            <p className="text-xs text-muted-foreground">استخدم هذا القالب كنقطة بداية، ثم أدخل بيانات الإدارات في الصفوف التالية.</p>
+            <Button variant="outline" size="sm" onClick={downloadOrgTemplate} className="gap-2">
+              <Download className="w-4 h-4" />
+              تحميل القالب
+            </Button>
+          </div>
+
+          {/* Step 2 */}
+          <div className="rounded-lg border p-4 space-y-2">
+            <h3 className="font-bold text-sm">2) اختيار الملف</h3>
+            <p className="text-xs text-muted-foreground">اختر ملف الإكسل الذي قمت بتعبئته ثم ابدأ الاستيراد.</p>
+            <Button variant="outline" size="sm" onClick={() => fileRef.current?.click()} className="gap-2">
+              <Upload className="w-4 h-4" />
+              {file ? file.name : "اختر ملف"}
+            </Button>
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".xlsx,.xls,.csv"
+              onChange={handleFile}
+              className="hidden"
+            />
+          </div>
+        </div>
+
+        <DialogFooter className="gap-2">
+          <Button variant="outline" onClick={() => { onClose(); setFile(null); }}>إلغاء</Button>
+          <Button onClick={doImport} disabled={!file || importing} className="gap-2">
+            {importing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+            ابدأ الاستيراد
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ========== Main Page ==========
+
 export default function OrgChart() {
   const { t } = useTranslation();
   const { data: tree, isLoading } = useReportOrgTree();
+  const [importOpen, setImportOpen] = useState(false);
 
   const roots = tree ? buildTree(tree as OrgNode[]) : [];
 
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
+        <Button onClick={() => setImportOpen(true)} className="gap-2">
+          <Upload className="w-4 h-4" />
+          استيراد الهيكل
+        </Button>
         <h1 className="text-3xl font-bold text-foreground">{t("orgChart.title")}</h1>
       </div>
       <Card>
@@ -122,6 +242,8 @@ export default function OrgChart() {
           )}
         </CardContent>
       </Card>
+
+      <ImportOrgDialog open={importOpen} onClose={() => setImportOpen(false)} />
     </div>
   );
 }

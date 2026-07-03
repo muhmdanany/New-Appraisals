@@ -203,6 +203,8 @@ type Evaluation struct {
 	RejectionReason *string          `json:"rejectionReason"`
 	EmployeeAck     bool             `json:"employeeAck"`
 	ObjectionNote   *string          `json:"objectionNote"`
+	TemplateID      *string          `json:"templateId"`
+	EvalType        string           `json:"evalType"`
 	CreatedAt       time.Time        `json:"createdAt"`
 	UpdatedAt       time.Time        `json:"updatedAt"`
 	Items           []EvaluationItem `json:"items,omitempty"`

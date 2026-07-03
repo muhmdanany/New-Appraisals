@@ -55,7 +55,9 @@ type EvaluationFormData struct {
 }
 
 // EvaluationFormData assembles the blank-form payload for an employee.
-func (s *Store) EvaluationFormData(ctx context.Context, employeeID string) (*EvaluationFormData, error) {
+// If templateID is non-empty, loads questions from the template instead of
+// the global shared competencies.
+func (s *Store) EvaluationFormData(ctx context.Context, employeeID string, templateID ...string) (*EvaluationFormData, error) {
 	var (
 		emp        FormEmployee
 		deptName   *string
@@ -115,32 +117,66 @@ func (s *Store) EvaluationFormData(ctx context.Context, employeeID string) (*Eva
 		Kpis:            []FormKpi{},
 	}
 
-	srows, err := s.pool.Query(ctx, `
-		SELECT "sharedKey", name, indicators, type FROM "Competency" WHERE "isShared"=true ORDER BY "sharedKey"`)
-	if err != nil {
-		return nil, err
+	// Determine if we should load from a template instead of global competencies.
+	var tplID string
+	if len(templateID) > 0 && templateID[0] != "" {
+		tplID = templateID[0]
 	}
-	defer srows.Close()
-	for srows.Next() {
-		var key *string
-		var name string
-		var indicators *string
-		var typ string
-		if err := srows.Scan(&key, &name, &indicators, &typ); err != nil {
+
+	if tplID != "" {
+		// Load items from the evaluation template.
+		trows, err := s.pool.Query(ctx, `
+			SELECT g.name, i.id, i.label, i.help_text, g.sort_order, i.sort_order
+			FROM eval_template_items i
+			JOIN eval_template_groups g ON g.id = i.group_id
+			WHERE g.template_id=$1
+			ORDER BY g.sort_order, i.sort_order`, tplID)
+		if err != nil {
 			return nil, err
 		}
-		item := FormSharedItem{Name: name, Indicators: indicators}
-		if key != nil {
-			item.Key = *key
+		defer trows.Close()
+		for trows.Next() {
+			var groupName, itemID, label string
+			var helpText *string
+			var gSort, iSort int
+			if err := trows.Scan(&groupName, &itemID, &label, &helpText, &gSort, &iSort); err != nil {
+				return nil, err
+			}
+			item := FormSharedItem{Key: "tpl_" + itemID, Name: label, Indicators: helpText}
+			out.Shared[groupName] = append(out.Shared[groupName], item)
 		}
-		label, ok := typeLabelMap[typ]
-		if !ok {
-			label = typ
+		if err := trows.Err(); err != nil {
+			return nil, err
 		}
-		out.Shared[label] = append(out.Shared[label], item)
-	}
-	if err := srows.Err(); err != nil {
-		return nil, err
+	} else {
+		// Default: load from global shared competencies.
+		srows, err := s.pool.Query(ctx, `
+			SELECT "sharedKey", name, indicators, type FROM "Competency" WHERE "isShared"=true ORDER BY "sharedKey"`)
+		if err != nil {
+			return nil, err
+		}
+		defer srows.Close()
+		for srows.Next() {
+			var key *string
+			var name string
+			var indicators *string
+			var typ string
+			if err := srows.Scan(&key, &name, &indicators, &typ); err != nil {
+				return nil, err
+			}
+			item := FormSharedItem{Name: name, Indicators: indicators}
+			if key != nil {
+				item.Key = *key
+			}
+			label, ok := typeLabelMap[typ]
+			if !ok {
+				label = typ
+			}
+			out.Shared[label] = append(out.Shared[label], item)
+		}
+		if err := srows.Err(); err != nil {
+			return nil, err
+		}
 	}
 
 	if jobID != nil {

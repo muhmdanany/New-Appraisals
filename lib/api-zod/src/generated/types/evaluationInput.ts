@@ -17,4 +17,5 @@ export interface EvaluationInput {
   sharedScores?: EvaluationInputSharedScores;
   jobScores?: EvaluationInputJobScores;
   kpis?: EvaluationKpiInput[];
+  templateId?: string;
 }

@@ -24,7 +24,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Pencil, Trash2, Sparkles, Loader2 } from "lucide-react";
+import { Plus, Pencil, Trash2, Sparkles, Loader2, ChevronDown, ChevronUp } from "lucide-react";
 import { FormDialog, TextField, TextAreaField, useCanManage } from "@/components/form-fields";
 import {
   AlertDialog,
@@ -110,11 +110,13 @@ export default function CareerPaths() {
   const [editing, setEditing] = useState<Row | null>(null);
   const [form, setForm] = useState({ name: "", field: "", duration: "", description: "" });
   const [stages, setStages] = useState<StageRow[]>([{ ...emptyStage }]);
+  const [collapsedStages, setCollapsedStages] = useState<Record<number, boolean>>({0: true});
 
   const openCreate = () => {
     setEditing(null);
     setForm({ name: "", field: "", duration: "", description: "" });
     setStages([{ ...emptyStage }]);
+    setCollapsedStages({0: true});
     setOpen(true);
   };
   const openEdit = (r: Row) => {
@@ -125,9 +127,8 @@ export default function CareerPaths() {
       duration: r.duration ?? "",
       description: r.description ?? "",
     });
-    setStages(
-      r.stages && r.stages.length
-        ? r.stages.map((s) => ({
+    const mapped = r.stages && r.stages.length
+      ? r.stages.map((s) => ({
             title: s.title,
             level: s.level ?? "",
             gradeNum: s.gradeNum ?? "",
@@ -136,8 +137,9 @@ export default function CareerPaths() {
             requiredCompetencies: (s.requiredCompetencies ?? []).join("، "),
             promotionCriteria: (s.promotionCriteria ?? []).join("، "),
           }))
-        : [{ ...emptyStage }],
-    );
+      : [{ ...emptyStage }];
+    setStages(mapped);
+    setCollapsedStages(Object.fromEntries(mapped.map((_, i) => [i, true])));
     setOpen(true);
   };
 
@@ -286,22 +288,33 @@ export default function CareerPaths() {
         <TextAreaField label={t("common.description")} value={form.description} onChange={(v) => setForm({ ...form, description: v })} />
 
         <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <Label>{t("careerPaths.stages")}</Label>
-            <Button type="button" variant="outline" size="sm" onClick={() => setStages([...stages, { ...emptyStage }])}>
-              <Plus className="w-4 h-4 ml-1" /> {t("careerPaths.addStage")}
-            </Button>
-          </div>
-          {stages.map((s, i) => (
-            <div key={i} className="rounded-md border border-border p-3 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">{t("careerPaths.stageN", { n: i + 1 })}</span>
-                {stages.length > 1 && (
-                  <Button type="button" variant="ghost" size="icon" onClick={() => setStages(stages.filter((_, idx) => idx !== i))}>
-                    <Trash2 className="w-4 h-4 text-destructive" />
-                  </Button>
-                )}
-              </div>
+          <Label>{t("careerPaths.stages")}</Label>
+          {stages.map((s, i) => {
+            const isCollapsed = collapsedStages[i] ?? true;
+            const toggleCollapse = () => setCollapsedStages(prev => ({ ...prev, [i]: !prev[i] }));
+            return (
+            <div key={i} className="rounded-lg border-2 border-border shadow-sm overflow-hidden">
+              <button
+                type="button"
+                onClick={toggleCollapse}
+                className="flex w-full items-center justify-between p-3 bg-muted/60 hover:bg-muted transition-colors border-b border-border"
+              >
+                <span className="text-sm font-bold">{t("careerPaths.stageN", { n: i + 1 })}{s.title ? ` — ${s.title}` : ""}</span>
+                <div className="flex items-center gap-2">
+                  {stages.length > 1 && (
+                    <span
+                      role="button"
+                      onClick={(e) => { e.stopPropagation(); setStages(stages.filter((_, idx) => idx !== i)); }}
+                      className="p-1.5 rounded-md hover:bg-destructive/10 transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4 text-destructive" />
+                    </span>
+                  )}
+                  {isCollapsed ? <ChevronDown className="w-4 h-4 text-muted-foreground" /> : <ChevronUp className="w-4 h-4 text-muted-foreground" />}
+                </div>
+              </button>
+              {!isCollapsed && (
+              <div className="p-4 space-y-3 bg-background">
               <div className="grid grid-cols-2 gap-2">
                 <div className="space-y-1">
                   <Label className="text-xs">{t("careerPaths.stageTitle")}</Label>
@@ -340,8 +353,22 @@ export default function CareerPaths() {
                   onChange={(e) => setStage(i, { promotionCriteria: e.target.value })}
                 />
               </div>
+              </div>
+              )}
             </div>
-          ))}
+            );
+          })}
+          <button
+            type="button"
+            onClick={() => {
+              const newIdx = stages.length;
+              setStages([...stages, { ...emptyStage }]);
+              setCollapsedStages(prev => ({ ...prev, [newIdx]: false }));
+            }}
+            className="w-full rounded-md border-2 border-dashed border-primary/40 py-3 text-sm font-medium text-primary hover:bg-primary/5 hover:border-primary transition-colors flex items-center justify-center gap-1"
+          >
+            <Plus className="w-4 h-4" /> {t("careerPaths.addStage")}
+          </button>
         </div>
       </FormDialog>
 
@@ -378,6 +405,7 @@ export default function CareerPaths() {
                         description: res.description ?? "",
                       });
                       setStages(stgs.length ? stgs : [{ ...emptyStage }]);
+                      setCollapsedStages(Object.fromEntries((stgs.length ? stgs : [emptyStage]).map((_, i) => [i, true])));
                       setEditing(null);
                       setAiOpen(false);
                       setOpen(true);
