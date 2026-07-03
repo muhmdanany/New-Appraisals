@@ -1766,10 +1766,39 @@ function PermissionsTab() {
 
 function RolesView() {
   const { toast } = useToast();
+  const qc = useQueryClient();
   const [editRole, setEditRole] = useState<string | null>(null);
   const [editLabel, setEditLabel] = useState("");
   const [roleToDelete, setRoleToDelete] = useState<string | null>(null);
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
+
+  const { data: hiddenRoles = [] } = useQuery<string[]>({
+    queryKey: ["settings", "hidden-roles"],
+    queryFn: async () => {
+      try {
+        return await apiFetch("/api/settings/hidden-roles");
+      } catch {
+        return [];
+      }
+    },
+  });
+
+  const visibleRoles = ALL_ROLES.filter((r) => !hiddenRoles.includes(r));
+
+  const hideRoleMut = useMutation({
+    mutationFn: async (role: string) => {
+      const updated = [...hiddenRoles, role];
+      return apiFetch("/api/settings/hidden-roles", {
+        method: "PUT",
+        body: JSON.stringify(updated),
+      });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["settings", "hidden-roles"] });
+      toast({ title: "تم حذف الدور" });
+    },
+    onError: (e: any) => toast({ title: "خطأ", description: e.message, variant: "destructive" }),
+  });
 
   const handleCopy = (role: string) => {
     const label = ROLE_LABELS[role] ?? role;
@@ -1779,8 +1808,7 @@ function RolesView() {
 
   const handleDelete = () => {
     if (!roleToDelete) return;
-    const label = ROLE_LABELS[roleToDelete] ?? roleToDelete;
-    toast({ title: `تم حذف الدور: ${label}` });
+    hideRoleMut.mutate(roleToDelete);
     setRoleToDelete(null);
     setDeleteConfirmText("");
   };
@@ -1794,7 +1822,7 @@ function RolesView() {
         الأدوار المتاحة في النظام وعدد المستخدمين لكل دور.
       </p>
       <div className="space-y-2">
-        {ALL_ROLES.map((role) => (
+        {visibleRoles.map((role) => (
           <div key={role} className="flex items-center gap-3 border rounded-lg px-4 py-3 bg-card group">
             <div className="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center shrink-0">
               <Users className="w-4 h-4" />

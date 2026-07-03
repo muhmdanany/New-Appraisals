@@ -346,3 +346,38 @@ func (h *Handler) SavePermissions(w http.ResponseWriter, r *http.Request) {
 	h.audit(r, "settings.permissions.update", "Settings", nil)
 	httpx.JSON(w, http.StatusOK, h.Perms())
 }
+
+// ---------- Hidden Roles ----------
+
+const hiddenRolesKey = "hidden_roles"
+
+// GetHiddenRoles handles GET /api/settings/hidden-roles.
+func (h *Handler) GetHiddenRoles(w http.ResponseWriter, r *http.Request) {
+	val, err := h.Store.GetSetting(r.Context(), hiddenRolesKey)
+	if err != nil {
+		httpx.JSON(w, http.StatusOK, []string{})
+		return
+	}
+	var roles []string
+	if err := json.Unmarshal(val, &roles); err != nil {
+		httpx.JSON(w, http.StatusOK, []string{})
+		return
+	}
+	httpx.JSON(w, http.StatusOK, roles)
+}
+
+// SaveHiddenRoles handles PUT /api/settings/hidden-roles.
+func (h *Handler) SaveHiddenRoles(w http.ResponseWriter, r *http.Request) {
+	var roles []string
+	if err := httpx.Decode(r, &roles); err != nil {
+		httpx.WriteErr(w, err)
+		return
+	}
+	val, _ := json.Marshal(roles)
+	if err := h.Store.SaveSetting(r.Context(), hiddenRolesKey, val); err != nil {
+		httpx.WriteErr(w, err)
+		return
+	}
+	h.audit(r, "settings.hidden_roles.update", "Settings", nil)
+	httpx.JSON(w, http.StatusOK, roles)
+}

@@ -124,6 +124,8 @@ func New(h *handlers.Handler) http.Handler {
 			r.With(perm(rbac.ResAdmin, rbac.ActEdit)).Put("/settings/field-options", h.SaveFieldOptions)
 			r.Get("/settings/permissions", h.GetPermissions)
 			r.With(perm(rbac.ResAdmin, rbac.ActEdit)).Put("/settings/permissions", h.SavePermissions)
+			r.Get("/settings/hidden-roles", h.GetHiddenRoles)
+			r.With(perm(rbac.ResAdmin, rbac.ActEdit)).Put("/settings/hidden-roles", h.SaveHiddenRoles)
 
 			// Notifications.
 			r.With(perm(rbac.ResAdmin, rbac.ActView)).Get("/admin/notification/config", h.GetNotificationConfig)
