@@ -114,9 +114,8 @@ function getSections(t: (key: string) => string): Section[] {
     {
       title: t("admin.sections.systemSettings"),
       cards: [
-        { id: "settings", icon: Settings, title: t("admin.cards.settings"), description: t("admin.cards.settingsDesc") },
         { id: "notifications", icon: Bell, title: "الإشعارات", description: "إعدادات البريد والواتساب وسجل الإشعارات" },
-        { id: "templates", icon: FileText, title: "نماذج التقييم", description: "إدارة نماذج وأسئلة التقييم" },
+        { id: "templates", icon: FileText, title: "نماذج التقييم", description: "إدارة النماذج والإعدادات" },
         { id: "criteria-guide", icon: BookOpen, title: "مرجع المعايير", description: "تحرير محتوى دليل معايير التقييم" },
       ],
     },
@@ -2598,8 +2597,49 @@ function TemplateEditor({ initial, onSaved, onCancel }: { initial: EvalTemplate 
 
 type GuideSection = { title: string; content: string };
 
+function buildDefaultGuideSections(t: (k: string) => string): GuideSection[] {
+  // Build HTML tables from translation keys to pre-populate the guide
+  const scaleHtml = `<p>${t("evaluations.criteria.howToUse")} ${t("evaluations.criteria.howToUseDesc")}</p>
+<table border="1" cellpadding="6" cellspacing="0" style="width:100%;border-collapse:collapse;text-align:right">
+<tr style="background:#f3f4f6"><th>الدرجة</th><th>المعنى</th><th>النسبة</th><th>دلالة المعنى</th></tr>
+${[5,4,3,2,1].map(l => `<tr><td><strong>${l}</strong></td><td>${t(`evaluations.criteria.scale.${l}.label`)}</td><td>${l===5?"91–100%":l===4?"76–90%":l===3?"61–75%":l===2?"41–60%":"≤ 40%"}</td><td>${t(`evaluations.criteria.scale.${l}.desc`)}</td></tr>`).join("\n")}
+</table>`;
+
+  const buildCompHtml = (section: string) => {
+    return `<table border="1" cellpadding="6" cellspacing="0" style="width:100%;border-collapse:collapse;text-align:right">
+<tr style="background:#f3f4f6"><th>المستوى</th><th>الالتزام</th><th>الأمثلة</th><th>الدليل</th><th>التعديل</th></tr>
+${[5,4,3,2,1].map(l => `<tr><td><strong>${l} - ${t(`evaluations.criteria.scale.${l}.label`)}</strong></td><td>${t(`evaluations.criteria.${section}.${l}.commitment`)}</td><td>${t(`evaluations.criteria.${section}.${l}.examples`)}</td><td>${t(`evaluations.criteria.${section}.${l}.evidence`)}</td><td>${t(`evaluations.criteria.${section}.${l}.adjust`)}</td></tr>`).join("\n")}
+</table>`;
+  };
+
+  const alertsHtml = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px">
+${["halo","central","documentation","lenient","bias","strict"].map(k => `<div style="border-right:4px solid #888;padding:10px;border-radius:8px;background:#fafafa"><strong>${t(`evaluations.criteria.alerts.${k}.title`)}</strong><br/><span style="font-size:0.85em;color:#666">${t(`evaluations.criteria.alerts.${k}.desc`)}</span></div>`).join("\n")}
+</div>`;
+
+  const finalHtml = `<table border="1" cellpadding="6" cellspacing="0" style="width:100%;border-collapse:collapse;text-align:right">
+<tr style="background:#f3f4f6"><th>النسبة</th><th>التقدير</th><th>الوصف والقرارات</th></tr>
+${["91-100","76-90","61-75","41-60","0-40"].map(r => `<tr><td>${r}</td><td>${t(`evaluations.criteria.finalTable.${r}.label`)}</td><td>${t(`evaluations.criteria.finalTable.${r}.desc`)}</td></tr>`).join("\n")}
+</table>`;
+
+  const formulaHtml = `<div style="text-align:center;padding:16px;border:1px solid #ccc;border-radius:8px;background:#f9fafb">
+<p style="font-family:monospace">${t("evaluations.criteria.formula")}</p>
+<p style="font-size:0.85em;color:#666">${t("evaluations.criteria.formulaNote")}</p>
+</div>`;
+
+  return [
+    { title: t("evaluations.criteria.scaleSummary"), content: scaleHtml },
+    { title: t("evaluations.criteria.behavioralSection"), content: buildCompHtml("behavioral") },
+    { title: t("evaluations.criteria.leadershipSection"), content: buildCompHtml("leadership") },
+    { title: t("evaluations.criteria.technicalSection"), content: buildCompHtml("technical") },
+    { title: t("evaluations.criteria.alertsTitle"), content: alertsHtml },
+    { title: t("evaluations.criteria.finalTableTitle"), content: finalHtml },
+    { title: t("evaluations.criteria.formulaTitle"), content: formulaHtml },
+  ];
+}
+
 function CriteriaGuideTab() {
   const { toast } = useToast();
+  const { t } = useTranslation();
   const [sections, setSections] = useState<GuideSection[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -2608,7 +2648,12 @@ function CriteriaGuideTab() {
     queryKey: ["criteria-guide-config"],
     queryFn: async () => {
       const r = await apiFetch<{ sections: GuideSection[] }>("/api/settings/criteria-guide");
-      if (r?.sections?.length) setSections(r.sections);
+      if (r?.sections?.length) {
+        setSections(r.sections);
+      } else {
+        // Load defaults from translations
+        setSections(buildDefaultGuideSections(t));
+      }
       setLoaded(true);
       return r;
     },
