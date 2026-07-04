@@ -127,7 +127,6 @@ function getViewTitles(t: (key: string) => string): Record<string, string> {
     users: t("admin.views.users"),
     permissions: t("admin.views.permissions"),
     import: t("admin.views.import"),
-    settings: t("admin.views.settings"),
     jobs: t("admin.views.jobs"),
     competencies: t("admin.views.competencies"),
     grades: t("admin.views.grades"),
@@ -209,7 +208,6 @@ export default function AdminPage() {
             {activeView === "users" && <UsersTab />}
             {activeView === "permissions" && <PermissionsTab />}
 
-            {activeView === "settings" && <SettingsTab />}
             {activeView === "notifications" && <NotificationsTab />}
             {activeView === "templates" && <TemplatesTab />}
             {activeView === "criteria-guide" && <CriteriaGuideTab />}
@@ -2264,6 +2262,32 @@ type EvalTemplate = { id: string; name: string; description: string; isDefault: 
 type TemplateSummary = { id: string; name: string; description: string; isDefault: boolean; groupCount: number; itemCount: number; createdAt: string };
 
 function TemplatesTab() {
+  const [subTab, setSubTab] = useState<"templates" | "settings">("templates");
+
+  return (
+    <div className="space-y-4">
+      {/* Sub-tabs */}
+      <div className="flex gap-1 border-b">
+        <button
+          onClick={() => setSubTab("templates")}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${subTab === "templates" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+        >
+          النماذج
+        </button>
+        <button
+          onClick={() => setSubTab("settings")}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${subTab === "settings" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+        >
+          إعدادات التقييم
+        </button>
+      </div>
+
+      {subTab === "templates" ? <TemplatesListTab /> : <SettingsTab />}
+    </div>
+  );
+}
+
+function TemplatesListTab() {
   const qc = useQueryClient();
   const { toast } = useToast();
   const { t } = useTranslation();
@@ -2647,15 +2671,19 @@ function CriteriaGuideTab() {
   const { isLoading } = useQuery({
     queryKey: ["criteria-guide-config"],
     queryFn: async () => {
-      const r = await apiFetch<{ sections: GuideSection[] }>("/api/settings/criteria-guide");
-      if (r?.sections?.length) {
-        setSections(r.sections);
-      } else {
-        // Load defaults from translations
+      try {
+        const r = await apiFetch<{ sections: GuideSection[] }>("/api/settings/criteria-guide");
+        if (r?.sections?.length) {
+          setSections(r.sections);
+        } else {
+          setSections(buildDefaultGuideSections(t));
+        }
+      } catch {
+        // API error or no saved data — load defaults
         setSections(buildDefaultGuideSections(t));
       }
       setLoaded(true);
-      return r;
+      return { sections: [] };
     },
   });
 
