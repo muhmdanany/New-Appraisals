@@ -120,6 +120,8 @@ func New(h *handlers.Handler) http.Handler {
 			// Settings (permissions + evaluation + field options).
 			r.With(perm(rbac.ResAdmin, rbac.ActView)).Get("/settings/evaluation", h.GetEvaluationSettings)
 			r.With(perm(rbac.ResAdmin, rbac.ActEdit)).Put("/settings/evaluation", h.SaveEvaluationSettings)
+			r.Get("/settings/criteria-guide", h.GetCriteriaGuide)
+			r.With(perm(rbac.ResAdmin, rbac.ActEdit)).Put("/settings/criteria-guide", h.SaveCriteriaGuide)
 			r.Get("/settings/field-options", h.GetFieldOptions)
 			r.With(perm(rbac.ResAdmin, rbac.ActEdit)).Put("/settings/field-options", h.SaveFieldOptions)
 			r.Get("/settings/permissions", h.GetPermissions)

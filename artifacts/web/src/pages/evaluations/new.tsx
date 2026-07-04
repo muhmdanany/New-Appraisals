@@ -20,7 +20,7 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { SelectField } from "@/components/form-fields";
-import { Loader2, Save, Send, Plus, X, BookOpen, ChevronDown, ChevronUp, ChevronsUpDown } from "lucide-react";
+import { Loader2, Save, Send, Plus, X, BookOpen, ChevronDown, ChevronUp, ChevronsUpDown, Star } from "lucide-react";
 import { CriteriaGuideDialog } from "./index";
 
 /* ───── Rating row (1–5 buttons matching Vercel UI) ───── */
@@ -53,31 +53,67 @@ function RatingRow({
   onChange: (v: number) => void;
   ratingLabels: Record<number, string>;
 }) {
+  const maxScore = Math.max(...Object.keys(ratingLabels).map(Number), 5);
+  const scores = Array.from({ length: maxScore }, (_, i) => maxScore - i);
+  const getColor = (n: number) => {
+    const ratio = (n - 1) / (maxScore - 1);
+    if (ratio <= 0.2) return "#c0392b";
+    if (ratio <= 0.4) return "#b87d12";
+    if (ratio <= 0.6) return "#2a6db5";
+    if (ratio <= 0.8) return "#27ae60";
+    return "#1a7f4b";
+  };
+  const activeColor = value ? getColor(value) : undefined;
+
   return (
-    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 py-2 last:border-0">
-      <div className="min-w-[180px] flex-1">
+    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 py-3 last:border-0">
+      <div className="min-w-[140px] flex-1">
         <div className="text-sm font-medium text-foreground">{label}</div>
       </div>
-      <div className="flex gap-1">
-        {[5, 4, 3, 2, 1].map((n) => {
-          const active = value === n;
-          return (
-            <button
-              key={n}
-              type="button"
-              title={ratingLabels[n]}
-              onClick={() => onChange(n)}
-              className="flex size-8 items-center justify-center rounded-md border text-xs font-bold transition-colors"
-              style={
-                active
-                  ? { background: RATING_COLORS[n], borderColor: RATING_COLORS[n], color: "#fff" }
-                  : { borderColor: RATING_COLORS[n], color: RATING_COLORS[n], background: "#fff" }
-              }
-            >
-              {n}
-            </button>
-          );
-        })}
+      <div className="flex items-center gap-2 min-w-[280px]">
+        {/* Dots on line */}
+        <div className="relative flex items-center w-full max-w-[200px]">
+          {/* Background line */}
+          <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-[2px] bg-border rounded-full" />
+          {/* Active fill line — from low end towards selected value */}
+          {value && (
+            <div
+              className="absolute top-1/2 -translate-y-1/2 h-[2px] rounded-full transition-all end-0"
+              style={{
+                width: `${((value - 1) / (maxScore - 1)) * 100}%`,
+                background: activeColor,
+              }}
+            />
+          )}
+          {/* Dots */}
+          <div className="relative flex items-center justify-between w-full">
+            {scores.map((n) => {
+              const isActive = value === n;
+              const isPast = value !== undefined && n <= value;
+              return (
+                <button
+                  key={n}
+                  type="button"
+                  title={ratingLabels[n]}
+                  onClick={() => onChange(n)}
+                  className="relative z-10 rounded-full transition-all"
+                  style={{
+                    width: isActive ? 18 : 12,
+                    height: isActive ? 18 : 12,
+                    background: isPast && activeColor ? activeColor : isActive ? activeColor : "#fff",
+                    border: isPast && activeColor ? `2px solid ${activeColor}` : isActive ? `2px solid ${activeColor}` : "2px solid #aaa",
+                    boxShadow: isActive ? `0 0 0 3px ${activeColor}30` : "none",
+                    cursor: "pointer",
+                  }}
+                />
+              );
+            })}
+          </div>
+        </div>
+        {/* Selected label — next to the bar */}
+        <span className="text-[10px] font-semibold whitespace-nowrap min-w-[60px]" style={{ color: activeColor }}>
+          {value ? ratingLabels[value] : ""}
+        </span>
       </div>
     </div>
   );
@@ -126,6 +162,11 @@ function calculateLiveScore(opts: {
     totalScore = Math.round(competencyScore);
   } else if (kpiScore !== null && compWeight === 0) {
     totalScore = Math.round(kpiScore);
+  } else if (competencyScore !== null) {
+    // KPIs not filled yet — show competency-only score as preview
+    totalScore = Math.round(competencyScore * (compWeight / 100));
+  } else if (kpiScore !== null) {
+    totalScore = Math.round(kpiScore * (kpiWeight / 100));
   }
 
   // Rating label
@@ -158,12 +199,16 @@ export function EvaluationFormBody({
   initial,
   initialTemplateId,
   evalType = "EMPLOYEE",
+  period: periodProp,
+  mode: modeProp,
 }: {
   employeeId: string;
   evaluationId?: string;
   initial?: EvaluationInitial;
   initialTemplateId?: string;
   evalType?: string;
+  period?: string;
+  mode?: string;
 }) {
   const hasEmployee = Boolean(employeeId);
   const [templateId, setTemplateId] = useState<string | undefined>(initialTemplateId);
@@ -181,10 +226,15 @@ export function EvaluationFormBody({
     },
   });
 
-  // Auto-select default template if none chosen and templates available.
+  // Auto-select first template matching evalType if none chosen.
   if (!templateId && templates?.length && !evaluationId) {
-    const def = templates.find((t) => t.isDefault);
-    if (def) setTemplateId(def.id);
+    const def = templates.find((t) => t.isDefault) ?? templates[0];
+    setTemplateId(def.id);
+  }
+  // If current templateId is not in the filtered templates list, reset it.
+  if (templateId && templates?.length && !templates.find((t) => t.id === templateId)) {
+    const def = templates.find((t) => t.isDefault) ?? templates[0];
+    setTemplateId(def.id);
   }
 
   const formParams = templateId ? { employeeId, templateId } : { employeeId };
@@ -199,15 +249,44 @@ export function EvaluationFormBody({
   const { toast } = useToast();
   const [, navigate] = useLocation();
   const { t } = useTranslation();
-  const RATING_LABELS = getRatingLabels(t);
+  const RATING_LABELS_DEFAULT = getRatingLabels(t);
+
+  // Fetch rating labels from evaluation settings
+  const { data: evalSettings } = useQuery<{ ratingScale: number; ratingLabels: string[]; evaluationPeriods: string[]; defaultKpiWeight?: number }>({
+    queryKey: ["eval-settings-labels"],
+    queryFn: async () => {
+      const uid = localStorage.getItem("selectedUserId");
+      const h: Record<string, string> = { "Content-Type": "application/json" };
+      if (uid) h["X-User-Id"] = uid;
+      const r = await fetch("/api/settings/evaluation", { headers: h });
+      if (!r.ok) return null;
+      return r.json();
+    },
+  });
+
+  // Use saved labels if available, otherwise fallback to defaults
+  const RATING_LABELS = (() => {
+    if (evalSettings?.ratingLabels?.length) {
+      const labels: Record<number, string> = {};
+      evalSettings.ratingLabels.forEach((l, i) => {
+        labels[i + 1] = l || RATING_LABELS_DEFAULT[i + 1] || String(i + 1);
+      });
+      return labels;
+    }
+    return RATING_LABELS_DEFAULT;
+  })();
+
+  // Use saved periods if available
+  const savedPeriods = evalSettings?.evaluationPeriods ?? [];
+
   const [guideOpen, setGuideOpen] = useState(false);
   const create = useCreateEvaluation();
   const update = useUpdateEvaluation();
   const submitEval = useSubmitEvaluation();
 
-  const [period, setPeriod] = useState(initial?.period ?? `${t("evaluations.new.yearPrefix")} ${new Date().getFullYear()}`);
-  const [mode, setMode] = useState(initial?.mode ?? "BOTH");
-  const [kpiWeight, setKpiWeight] = useState(initial?.kpiWeight ?? 60);
+  const period = initial?.period ?? periodProp ?? `${t("evaluations.new.yearPrefix")} ${new Date().getFullYear()}`;
+  const mode = initial?.mode ?? modeProp ?? "BOTH";
+  const kpiWeight = initial?.kpiWeight ?? evalSettings?.defaultKpiWeight ?? 60;
   const [sharedScores, setSharedScores] = useState<Record<string, number>>(initial?.sharedScores ?? {});
   const [jobScores, setJobScores] = useState<Record<string, number>>(initial?.jobScores ?? {});
   const [kpis, setKpis] = useState<{ name: string; achievement: number | "" }[]>(
@@ -327,38 +406,8 @@ export function EvaluationFormBody({
         </div>
       </Card>
 
-      {/* Setup fields */}
-      <Card className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-3">
-        {/* Template selector — only show when templates exist */}
-        {templates && templates.length > 0 && !evaluationId && (
-          <div className="space-y-1.5 sm:col-span-3">
-            <Label>نموذج التقييم</Label>
-            <select
-              className="w-full rounded-md border bg-background px-3 py-2 text-sm"
-              value={templateId ?? ""}
-              onChange={(e) => setTemplateId(e.target.value || undefined)}
-            >
-              <option value="">بدون نموذج (الجدارات الافتراضية)</option>
-              {templates.map((tpl) => (
-                <option key={tpl.id} value={tpl.id}>{tpl.name}{tpl.isDefault ? " ⭐" : ""}</option>
-              ))}
-            </select>
-          </div>
-        )}
-        <div className="space-y-1.5">
-          <Label>{t("evaluations.new.periodLabel")}</Label>
-          <Input value={period} onChange={(e) => setPeriod(e.target.value)} />
-        </div>
-        <SelectField
-          label={t("evaluations.new.scopeLabel")}
-          value={mode}
-          onChange={setMode}
-          options={[
-            { value: "BOTH", label: t("evaluations.new.scopeAll") },
-            { value: "SHARED", label: t("evaluations.new.scopeShared") },
-            { value: "SPECIFIC", label: t("evaluations.new.scopeJob") },
-          ]}
-        />
+      {/* KPI Weight slider — read-only, controlled from admin settings */}
+      <Card className="p-4">
         <div className="space-y-1.5">
           <Label>
             {t("evaluations.new.weightsLabel", { kpiW: String(kpiWeight), compW: String(100 - kpiWeight) })}
@@ -369,9 +418,10 @@ export function EvaluationFormBody({
             max={100}
             step={5}
             value={kpiWeight}
-            onChange={(e) => setKpiWeight(Number(e.target.value))}
-            className="w-full accent-[hsl(var(--primary))]"
+            disabled
+            className="w-full accent-[hsl(var(--primary))] opacity-60 cursor-not-allowed"
           />
+          <p className="text-xs text-muted-foreground">يتم التحكم من إعدادات التقييم في لوحة الإدارة</p>
         </div>
       </Card>
 
@@ -562,11 +612,53 @@ export function EvaluationFormBody({
 export default function NewEvaluationPage() {
   const [evalType, setEvalType] = useState<"EMPLOYEE" | "MANAGER">("EMPLOYEE");
   const [employeeId, setEmployeeId] = useState("");
+  const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const { t } = useTranslation();
+  const [period, setPeriod] = useState(() => localStorage.getItem("favPeriod") || "");
+  const [mode, setMode] = useState("BOTH");
+  const [favPeriod, setFavPeriod] = useState(() => localStorage.getItem("favPeriod") || "");
 
-  // Fetch employees filtered by evalType (role)
+  const isFavPeriod = period !== "" && favPeriod === period;
+  const toggleFavPeriod = () => {
+    if (isFavPeriod) {
+      localStorage.removeItem("favPeriod");
+      setFavPeriod("");
+    } else if (period) {
+      localStorage.setItem("favPeriod", period);
+      setFavPeriod(period);
+    }
+  };
+
+  // Fetch eval settings for periods
+  const { data: evalSettings } = useQuery<{ evaluationPeriods?: string[] }>({
+    queryKey: ["eval-settings-top"],
+    queryFn: async () => {
+      const uid = localStorage.getItem("selectedUserId");
+      const h: Record<string, string> = { "Content-Type": "application/json" };
+      if (uid) h["X-User-Id"] = uid;
+      const r = await fetch("/api/settings/evaluation", { headers: h });
+      if (!r.ok) return {};
+      return r.json();
+    },
+  });
+  const savedPeriods = evalSettings?.evaluationPeriods ?? [];
+
+  // Fetch all templates
+  const { data: allTemplates } = useQuery<{ id: string; name: string; evalType?: string; isDefault?: boolean }[]>({
+    queryKey: ["eval-templates-all"],
+    queryFn: async () => {
+      const uid = localStorage.getItem("selectedUserId");
+      const h: Record<string, string> = { "Content-Type": "application/json" };
+      if (uid) h["X-User-Id"] = uid;
+      const r = await fetch("/api/admin/templates", { headers: h });
+      if (!r.ok) return [];
+      return r.json();
+    },
+  });
+
+  // Fetch employees filtered by evalType — only when a template is selected
   const { data: employees } = useQuery<{ id: string; name: string; employeeNumber: string }[]>({
-    queryKey: ["employees-for-eval", evalType],
+    queryKey: ["employees-for-eval", evalType, selectedTemplateId],
     queryFn: async () => {
       const uid = localStorage.getItem("selectedUserId");
       const h: Record<string, string> = { "Content-Type": "application/json" };
@@ -575,6 +667,7 @@ export default function NewEvaluationPage() {
       if (!r.ok) return [];
       return r.json();
     },
+    enabled: Boolean(selectedTemplateId),
   });
 
   // Reset employee when type changes
@@ -583,43 +676,55 @@ export default function NewEvaluationPage() {
     setEmployeeId("");
   };
 
+  // Group templates by type
+  const employeeTemplates = allTemplates?.filter((t) => !t.evalType || t.evalType === "EMPLOYEE") ?? [];
+  const managerTemplates = allTemplates?.filter((t) => t.evalType === "MANAGER") ?? [];
+  const currentTemplates = evalType === "EMPLOYEE" ? employeeTemplates : managerTemplates;
+
   return (
     <div className="space-y-4">
       <h1 className="text-xl font-bold text-foreground">{t("evaluations.new.title")}</h1>
 
-      {/* Evaluation type selector */}
-      <Card className="p-4">
-        <div className="space-y-3">
-          <Label className="font-bold">{t("evaluations.selectEvalType")}</Label>
-          <div className="flex gap-3">
-            <button
-              type="button"
-              onClick={() => handleTypeChange("EMPLOYEE")}
-              className={`flex-1 rounded-lg border-2 p-3 text-sm font-medium transition-colors ${
-                evalType === "EMPLOYEE"
-                  ? "border-primary bg-primary/10 text-primary"
-                  : "border-border hover:border-primary/40"
-              }`}
+      {/* Top selectors — 2 per row */}
+      <Card className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4">
+        {/* Template */}
+        <div className="space-y-1.5">
+          <Label className="font-bold">نموذج التقييم</Label>
+          {allTemplates && allTemplates.length > 0 ? (
+            <select
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              value={selectedTemplateId}
+              onChange={(e) => {
+                const tpl = allTemplates?.find((t) => t.id === e.target.value);
+                setSelectedTemplateId(e.target.value);
+                if (tpl) {
+                  const newType = (tpl.evalType === "MANAGER" ? "MANAGER" : "EMPLOYEE") as "EMPLOYEE" | "MANAGER";
+                  if (newType !== evalType) handleTypeChange(newType);
+                }
+              }}
             >
-              {t("evaluations.evalTypeEmployee")}
-            </button>
-            <button
-              type="button"
-              onClick={() => handleTypeChange("MANAGER")}
-              className={`flex-1 rounded-lg border-2 p-3 text-sm font-medium transition-colors ${
-                evalType === "MANAGER"
-                  ? "border-primary bg-primary/10 text-primary"
-                  : "border-border hover:border-primary/40"
-              }`}
-            >
-              {t("evaluations.evalTypeManager")}
-            </button>
-          </div>
+              <option value="">— {t("evaluations.new.selectPlaceholder")} —</option>
+              {employeeTemplates.length > 0 && (
+                <optgroup label={t("evaluations.evalTypeEmployee")}>
+                  {employeeTemplates.map((tpl) => (
+                    <option key={tpl.id} value={tpl.id}>{tpl.name}</option>
+                  ))}
+                </optgroup>
+              )}
+              {managerTemplates.length > 0 && (
+                <optgroup label={t("evaluations.evalTypeManager")}>
+                  {managerTemplates.map((tpl) => (
+                    <option key={tpl.id} value={tpl.id}>{tpl.name}</option>
+                  ))}
+                </optgroup>
+              )}
+            </select>
+          ) : (
+            <p className="text-sm text-destructive">لا توجد نماذج تقييم. يرجى إنشاء نموذج من لوحة الإدارة أولاً.</p>
+          )}
         </div>
-      </Card>
 
-      {/* Employee selector */}
-      <Card className="p-4">
+        {/* Employee */}
         <div className="space-y-1.5">
           <Label className="font-bold">{t("evaluations.new.selectEmployee")}</Label>
           <select
@@ -638,12 +743,58 @@ export default function NewEvaluationPage() {
             <p className="text-xs text-muted-foreground">{t("evaluations.new.noEmployees")}</p>
           )}
         </div>
+
+        {/* Period */}
+        <div className="space-y-1.5">
+          <Label className="font-bold">{t("evaluations.new.periodLabel")}</Label>
+          <div className="flex items-center gap-1.5">
+            {savedPeriods.length > 0 ? (
+              <select
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                value={period}
+                onChange={(e) => setPeriod(e.target.value)}
+              >
+                <option value="">{t("evaluations.new.selectPlaceholder")}</option>
+                {savedPeriods.map((p) => (
+                  <option key={p} value={p}>{p}</option>
+                ))}
+              </select>
+            ) : (
+              <Input value={period} onChange={(e) => setPeriod(e.target.value)} placeholder={t("evaluations.new.periodLabel")} className="flex-1" />
+            )}
+            <button
+              type="button"
+              onClick={toggleFavPeriod}
+              disabled={!period}
+              className="shrink-0 p-1.5 rounded-md hover:bg-accent disabled:opacity-30 transition-colors"
+              title={isFavPeriod ? "إلغاء التثبيت" : "تثبيت كافتراضي"}
+            >
+              <Star className={`w-5 h-5 ${isFavPeriod ? "fill-yellow-400 text-yellow-400" : "text-muted-foreground"}`} />
+            </button>
+          </div>
+        </div>
+
+        {/* Scope */}
+        <SelectField
+          label={t("evaluations.new.scopeLabel")}
+          value={mode}
+          onChange={setMode}
+          options={[
+            { value: "BOTH", label: t("evaluations.new.scopeAll") },
+            { value: "SHARED", label: t("evaluations.new.scopeShared") },
+            { value: "SPECIFIC", label: t("evaluations.new.scopeJob") },
+          ]}
+        />
       </Card>
 
-      {/* Form body — always visible, disabled until employee selected */}
-      <div className={employeeId ? "" : "opacity-50 pointer-events-none"}>
-        <EvaluationFormBody key={employeeId || "__empty"} employeeId={employeeId} evalType={evalType} />
-      </div>
+      {/* Form body — visible only when all required fields are filled */}
+      {employeeId && selectedTemplateId && period ? (
+        <EvaluationFormBody key={`${employeeId}_${selectedTemplateId}`} employeeId={employeeId} evalType={evalType} initialTemplateId={selectedTemplateId || undefined} period={period} mode={mode} />
+      ) : (
+        <Card className="p-6 text-center text-muted-foreground text-sm">
+          يرجى تعبئة جميع الحقول أعلاه للمتابعة
+        </Card>
+      )}
     </div>
   );
 }

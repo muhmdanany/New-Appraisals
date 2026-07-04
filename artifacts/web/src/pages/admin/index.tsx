@@ -34,7 +34,7 @@ import {
   Plus, Pencil, Trash2, CheckCircle, XCircle, Shield, Lock, Bell,
   ChevronDown, ChevronUp, ChevronLeft, Search, Copy, SlidersHorizontal,
   LayoutDashboard, Briefcase, Award, GraduationCap, Map, Target,
-  ClipboardCheck, FileBarChart, PieChart, Network, Mail, Loader2, Eye, EyeOff, Info, ExternalLink, FileText,
+  ClipboardCheck, FileBarChart, PieChart, Network, Mail, Loader2, Eye, EyeOff, Info, ExternalLink, FileText, BookOpen,
 } from "lucide-react";
 
 // --- API helpers ---
@@ -117,6 +117,7 @@ function getSections(t: (key: string) => string): Section[] {
         { id: "settings", icon: Settings, title: t("admin.cards.settings"), description: t("admin.cards.settingsDesc") },
         { id: "notifications", icon: Bell, title: "الإشعارات", description: "إعدادات البريد والواتساب وسجل الإشعارات" },
         { id: "templates", icon: FileText, title: "نماذج التقييم", description: "إدارة نماذج وأسئلة التقييم" },
+        { id: "criteria-guide", icon: BookOpen, title: "مرجع المعايير", description: "تحرير محتوى دليل معايير التقييم" },
       ],
     },
   ];
@@ -134,6 +135,7 @@ function getViewTitles(t: (key: string) => string): Record<string, string> {
     employees: t("admin.views.employees"),
     notifications: "الإشعارات",
     templates: "نماذج التقييم",
+    "criteria-guide": "مرجع المعايير",
   };
 }
 
@@ -211,6 +213,7 @@ export default function AdminPage() {
             {activeView === "settings" && <SettingsTab />}
             {activeView === "notifications" && <NotificationsTab />}
             {activeView === "templates" && <TemplatesTab />}
+            {activeView === "criteria-guide" && <CriteriaGuideTab />}
             {activeView === "jobs" && <Jobs />}
             {activeView === "competencies" && <Competencies />}
             {activeView === "grades" && <Grades />}
@@ -2256,10 +2259,10 @@ function NotificationsTab() {
 
 // ============== TEMPLATES TAB ==============
 
-type EvalTemplateItem = { label: string; helpText?: string | null; sortOrder: number };
+type EvalTemplateItem = { label: string; helpText?: string | null; weight: number; sortOrder: number };
 type EvalTemplateGroup = { id?: string; name: string; weight: number; sortOrder: number; items: EvalTemplateItem[] };
-type EvalTemplate = { id: string; name: string; description: string; isDefault: boolean; evalType: string; groups: EvalTemplateGroup[]; createdAt: string };
-type TemplateSummary = { id: string; name: string; description: string; isDefault: boolean; evalType: string; groupCount: number; itemCount: number; createdAt: string };
+type EvalTemplate = { id: string; name: string; description: string; isDefault: boolean; groups: EvalTemplateGroup[]; createdAt: string };
+type TemplateSummary = { id: string; name: string; description: string; isDefault: boolean; groupCount: number; itemCount: number; createdAt: string };
 
 function TemplatesTab() {
   const qc = useQueryClient();
@@ -2326,7 +2329,6 @@ function TemplatesTab() {
                 <div className="flex items-center gap-2">
                   <h4 className="font-semibold text-sm">{tpl.name}</h4>
                   {tpl.isDefault && <Badge variant="secondary" className="text-xs">افتراضي</Badge>}
-                  <Badge variant="outline" className="text-xs">{tpl.evalType === "MANAGER" ? t("evaluations.evalTypeManager") : t("evaluations.evalTypeEmployee")}</Badge>
                 </div>
                 {tpl.description && <p className="text-xs text-muted-foreground mt-0.5 truncate">{tpl.description}</p>}
                 <p className="text-xs text-muted-foreground mt-1">{tpl.groupCount} مجموعة · {tpl.itemCount} سؤال</p>
@@ -2358,9 +2360,8 @@ function TemplateEditor({ initial, onSaved, onCancel }: { initial: EvalTemplate 
   const [name, setName] = useState(initial?.name ?? "");
   const [description, setDescription] = useState(initial?.description ?? "");
   const [isDefault, setIsDefault] = useState(initial?.isDefault ?? false);
-  const [evalType, setEvalType] = useState<string>(initial?.evalType ?? "EMPLOYEE");
   const [groups, setGroups] = useState<EvalTemplateGroup[]>(
-    initial?.groups?.length ? initial.groups : [{ name: "", weight: 0, sortOrder: 0, items: [{ label: "", sortOrder: 0 }] }],
+    initial?.groups?.length ? initial.groups : [{ name: "", weight: 0, sortOrder: 0, items: [{ label: "", weight: 0, sortOrder: 0 }] }],
   );
   const [saving, setSaving] = useState(false);
 
@@ -2369,7 +2370,7 @@ function TemplateEditor({ initial, onSaved, onCancel }: { initial: EvalTemplate 
   };
 
   const addGroup = () => {
-    setGroups((gs) => [...gs, { name: "", weight: 0, sortOrder: gs.length, items: [{ label: "", sortOrder: 0 }] }]);
+    setGroups((gs) => [...gs, { name: "", weight: 0, sortOrder: gs.length, items: [{ label: "", weight: 0, sortOrder: 0 }] }]);
   };
 
   const removeGroup = (idx: number) => {
@@ -2397,7 +2398,7 @@ function TemplateEditor({ initial, onSaved, onCancel }: { initial: EvalTemplate 
   const addItem = (gIdx: number) => {
     setGroups((gs) =>
       gs.map((g, gi) =>
-        gi === gIdx ? { ...g, items: [...g.items, { label: "", sortOrder: g.items.length }] } : g,
+        gi === gIdx ? { ...g, items: [...g.items, { label: "", weight: 0, sortOrder: g.items.length }] } : g,
       ),
     );
   };
@@ -2421,13 +2422,21 @@ function TemplateEditor({ initial, onSaved, onCancel }: { initial: EvalTemplate 
       return;
     }
 
+    // Validate total weight per group does not exceed 100
+    for (const g of groups) {
+      const totalW = g.items.reduce((s, it) => s + (it.weight || 0), 0);
+      if (totalW > 100) {
+        toast({ title: `مجموع الأوزان في "${g.name}" يتجاوز 100%`, variant: "destructive" });
+        return;
+      }
+    }
+
     setSaving(true);
     try {
       const payload = {
         name: name.trim(),
         description: description.trim(),
         isDefault,
-        evalType,
         groups: groups.map((g, gi) => ({
           name: g.name.trim(),
           weight: g.weight,
@@ -2435,6 +2444,7 @@ function TemplateEditor({ initial, onSaved, onCancel }: { initial: EvalTemplate 
           items: g.items.filter((it) => it.label.trim()).map((it, ii) => ({
             label: it.label.trim(),
             helpText: it.helpText || null,
+            weight: it.weight || 0,
             sortOrder: ii,
           })),
         })),
@@ -2448,8 +2458,8 @@ function TemplateEditor({ initial, onSaved, onCancel }: { initial: EvalTemplate 
         toast({ title: "تم إنشاء النموذج" });
       }
       onSaved();
-    } catch {
-      toast({ title: "حدث خطأ", variant: "destructive" });
+    } catch (err: any) {
+      toast({ title: "حدث خطأ", description: err?.message || "تعذّر حفظ النموذج", variant: "destructive" });
     } finally {
       setSaving(false);
     }
@@ -2479,31 +2489,6 @@ function TemplateEditor({ initial, onSaved, onCancel }: { initial: EvalTemplate 
       <div className="flex items-center gap-2">
         <Switch checked={isDefault} onCheckedChange={setIsDefault} id="tpl-default" />
         <Label htmlFor="tpl-default" className="text-sm">نموذج افتراضي</Label>
-      </div>
-
-      {/* Evaluation type */}
-      <div>
-        <Label className="text-xs mb-1.5 block">{t("evaluations.selectEvalType")}</Label>
-        <div className="flex gap-3">
-          <button
-            type="button"
-            onClick={() => setEvalType("EMPLOYEE")}
-            className={`flex-1 rounded-lg border-2 p-2.5 text-sm font-medium transition-colors ${
-              evalType === "EMPLOYEE" ? "border-primary bg-primary/10 text-primary" : "border-border hover:border-primary/40"
-            }`}
-          >
-            {t("evaluations.evalTypeEmployee")}
-          </button>
-          <button
-            type="button"
-            onClick={() => setEvalType("MANAGER")}
-            className={`flex-1 rounded-lg border-2 p-2.5 text-sm font-medium transition-colors ${
-              evalType === "MANAGER" ? "border-primary bg-primary/10 text-primary" : "border-border hover:border-primary/40"
-            }`}
-          >
-            {t("evaluations.evalTypeManager")}
-          </button>
-        </div>
       </div>
 
       {/* Groups */}
@@ -2550,6 +2535,22 @@ function TemplateEditor({ initial, onSaved, onCancel }: { initial: EvalTemplate 
                       onChange={(e) => updateItem(gIdx, iIdx, { label: e.target.value })}
                       placeholder="نص السؤال / المعيار"
                     />
+                    <div className="flex items-center gap-1 shrink-0">
+                      <Input
+                        type="number"
+                        min={0}
+                        max={100}
+                        className="w-16 text-sm h-8 text-center"
+                        value={item.weight || ""}
+                        onChange={(e) => {
+                          const newVal = Math.max(0, parseInt(e.target.value) || 0);
+                          const othersTotal = group.items.reduce((s, it, idx) => s + (idx === iIdx ? 0 : (it.weight || 0)), 0);
+                          updateItem(gIdx, iIdx, { weight: Math.min(newVal, 100 - othersTotal) });
+                        }}
+                        placeholder="0"
+                      />
+                      <span className="text-xs text-muted-foreground">%</span>
+                    </div>
                     <Button
                       variant="ghost"
                       size="icon"
@@ -2561,6 +2562,16 @@ function TemplateEditor({ initial, onSaved, onCancel }: { initial: EvalTemplate 
                     </Button>
                   </div>
                 ))}
+                {/* Total weight bar */}
+                {(() => {
+                  const total = group.items.reduce((s, it) => s + (it.weight || 0), 0);
+                  return (
+                    <div className={`flex items-center justify-between text-xs pt-1 border-t ${total > 100 ? "text-destructive" : total === 100 ? "text-green-600" : "text-muted-foreground"}`}>
+                      <span>إجمالي الأوزان</span>
+                      <span className="font-bold">{total}%</span>
+                    </div>
+                  );
+                })()}
                 <Button variant="ghost" size="sm" className="text-xs h-7" onClick={() => addItem(gIdx)}>
                   <Plus className="w-3 h-3 ml-1" />
                   إضافة سؤال
@@ -2579,6 +2590,89 @@ function TemplateEditor({ initial, onSaved, onCancel }: { initial: EvalTemplate 
           حفظ
         </Button>
       </div>
+    </div>
+  );
+}
+
+// ============== CRITERIA GUIDE TAB ==============
+
+type GuideSection = { title: string; content: string };
+
+function CriteriaGuideTab() {
+  const { toast } = useToast();
+  const [sections, setSections] = useState<GuideSection[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const { isLoading } = useQuery({
+    queryKey: ["criteria-guide-config"],
+    queryFn: async () => {
+      const r = await apiFetch<{ sections: GuideSection[] }>("/api/settings/criteria-guide");
+      if (r?.sections?.length) setSections(r.sections);
+      setLoaded(true);
+      return r;
+    },
+  });
+
+  const addSection = () => setSections((s) => [...s, { title: "", content: "" }]);
+  const removeSection = (idx: number) => setSections((s) => s.filter((_, i) => i !== idx));
+  const updateSection = (idx: number, patch: Partial<GuideSection>) =>
+    setSections((s) => s.map((sec, i) => (i === idx ? { ...sec, ...patch } : sec)));
+  const moveSection = (idx: number, dir: -1 | 1) =>
+    setSections((s) => {
+      const arr = [...s]; const target = idx + dir;
+      if (target < 0 || target >= arr.length) return arr;
+      [arr[idx], arr[target]] = [arr[target], arr[idx]]; return arr;
+    });
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await apiFetch("/api/settings/criteria-guide", { method: "PUT", body: JSON.stringify({ sections }) });
+      toast({ title: "تم حفظ مرجع المعايير" });
+    } catch { toast({ title: "حدث خطأ", variant: "destructive" }); }
+    finally { setSaving(false); }
+  };
+
+  if (isLoading && !loaded) return <Skeleton className="h-40 w-full" />;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-muted-foreground">{sections.length} قسم</p>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={addSection}><Plus className="w-3.5 h-3.5 ml-1" />إضافة قسم</Button>
+          <Button size="sm" onClick={handleSave} disabled={saving}>
+            {saving && <Loader2 className="w-4 h-4 ml-1 animate-spin" />}حفظ
+          </Button>
+        </div>
+      </div>
+      {sections.length === 0 && (
+        <div className="text-center py-12 text-muted-foreground">
+          <BookOpen className="w-10 h-10 mx-auto mb-3 opacity-50" />
+          <p>لا توجد أقسام بعد</p>
+          <p className="text-xs mt-1">أضف أقسام تحتوي على محتوى دليل معايير التقييم</p>
+        </div>
+      )}
+      {sections.map((sec, idx) => (
+        <Card key={idx} className="border">
+          <CardContent className="py-3 px-4 space-y-2">
+            <div className="flex items-center gap-2">
+              <Input className="flex-1 font-semibold text-sm" value={sec.title}
+                onChange={(e) => updateSection(idx, { title: e.target.value })}
+                placeholder="عنوان القسم (مثال: مقياس التقييم)" />
+              <div className="flex gap-0.5 shrink-0">
+                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => moveSection(idx, -1)} disabled={idx === 0}><ChevronUp className="w-3.5 h-3.5" /></Button>
+                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => moveSection(idx, 1)} disabled={idx === sections.length - 1}><ChevronDown className="w-3.5 h-3.5" /></Button>
+                <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => removeSection(idx)}><Trash2 className="w-3.5 h-3.5" /></Button>
+              </div>
+            </div>
+            <textarea className="w-full rounded-md border bg-background px-3 py-2 text-sm min-h-[120px] resize-y"
+              value={sec.content} onChange={(e) => updateSection(idx, { content: e.target.value })}
+              placeholder={"محتوى القسم (يدعم HTML)\nمثال: <table>...</table> أو نص عادي"} dir="rtl" />
+          </CardContent>
+        </Card>
+      ))}
     </div>
   );
 }

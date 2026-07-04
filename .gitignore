@@ -55,3 +55,4 @@ artifacts/api-server/server
 # Logs
 *.log
 api.log
+"backup.sql"  

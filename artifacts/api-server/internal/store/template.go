@@ -33,6 +33,7 @@ func (s *Store) EnsureEvalTemplateTable(ctx context.Context) error {
 			group_id   TEXT NOT NULL REFERENCES eval_template_groups(id) ON DELETE CASCADE,
 			label      TEXT NOT NULL,
 			help_text  TEXT,
+			weight     INT NOT NULL DEFAULT 0,
 			sort_order INT NOT NULL DEFAULT 0
 		);
 	`)
@@ -44,6 +45,7 @@ func (s *Store) EnsureEvalTemplateTable(ctx context.Context) error {
 	// Add eval_type columns if missing.
 	_, _ = s.pool.Exec(ctx, `ALTER TABLE eval_templates ADD COLUMN IF NOT EXISTS eval_type TEXT NOT NULL DEFAULT 'EMPLOYEE'`)
 	_, _ = s.pool.Exec(ctx, `ALTER TABLE "Evaluation" ADD COLUMN IF NOT EXISTS eval_type TEXT NOT NULL DEFAULT 'EMPLOYEE'`)
+	_, _ = s.pool.Exec(ctx, `ALTER TABLE eval_template_items ADD COLUMN IF NOT EXISTS weight INT NOT NULL DEFAULT 0`)
 	return nil
 }
 
@@ -126,7 +128,7 @@ func (s *Store) GetTemplate(ctx context.Context, id string) (*domain.EvalTemplat
 
 	if len(t.Groups) > 0 {
 		irows, err := s.pool.Query(ctx, `
-			SELECT i.id, i.group_id, i.label, i.help_text, i.sort_order
+			SELECT i.id, i.group_id, i.label, i.help_text, i.weight, i.sort_order
 			FROM eval_template_items i
 			JOIN eval_template_groups g ON g.id = i.group_id
 			WHERE g.template_id=$1 ORDER BY i.sort_order`, id)
@@ -136,7 +138,7 @@ func (s *Store) GetTemplate(ctx context.Context, id string) (*domain.EvalTemplat
 		defer irows.Close()
 		for irows.Next() {
 			var item domain.EvalTemplateItem
-			if err := irows.Scan(&item.ID, &item.GroupID, &item.Label, &item.HelpText, &item.SortOrder); err != nil {
+			if err := irows.Scan(&item.ID, &item.GroupID, &item.Label, &item.HelpText, &item.Weight, &item.SortOrder); err != nil {
 				return nil, err
 			}
 			if idx, ok := groupIdx[item.GroupID]; ok {
@@ -175,6 +177,7 @@ type TemplateGroupInput struct {
 type TemplateItemInput struct {
 	Label     string  `json:"label"`
 	HelpText  *string `json:"helpText"`
+	Weight    int     `json:"weight"`
 	SortOrder int     `json:"sortOrder"`
 }
 
@@ -248,7 +251,7 @@ func (s *Store) DuplicateTemplate(ctx context.Context, id string) (*domain.EvalT
 	for i, g := range src.Groups {
 		items := make([]TemplateItemInput, len(g.Items))
 		for j, it := range g.Items {
-			items[j] = TemplateItemInput{Label: it.Label, HelpText: it.HelpText, SortOrder: it.SortOrder}
+			items[j] = TemplateItemInput{Label: it.Label, HelpText: it.HelpText, Weight: it.Weight, SortOrder: it.SortOrder}
 		}
 		groups[i] = TemplateGroupInput{Name: g.Name, Weight: g.Weight, SortOrder: g.SortOrder, Items: items}
 	}
@@ -272,8 +275,8 @@ func (s *Store) insertTemplateGroups(ctx context.Context, templateID string, gro
 		for _, it := range g.Items {
 			iid := NewID()
 			_, err := s.pool.Exec(ctx, `
-				INSERT INTO eval_template_items (id, group_id, label, help_text, sort_order)
-				VALUES ($1,$2,$3,$4,$5)`, iid, gid, it.Label, it.HelpText, it.SortOrder)
+				INSERT INTO eval_template_items (id, group_id, label, help_text, weight, sort_order)
+				VALUES ($1,$2,$3,$4,$5,$6)`, iid, gid, it.Label, it.HelpText, it.Weight, it.SortOrder)
 			if err != nil {
 				return err
 			}

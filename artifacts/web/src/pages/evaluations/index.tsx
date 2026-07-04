@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Plus, BookOpen, Trash2, ClipboardList, AlertTriangle, Info, Bell, Loader2, ChevronDown, ChevronUp, ChevronsUpDown } from "lucide-react";
 import { useCanManage } from "@/components/form-fields";
 import { useToast } from "@/hooks/use-toast";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -309,6 +309,25 @@ function CompetencyTable({ rows, t }: { rows: CompRow[]; t: (k: string) => strin
 
 export function CriteriaGuideDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { t } = useTranslation();
+
+  // Load saved guide from settings
+  const { data: guideData } = useQuery<{ sections: { title: string; content: string }[] }>({
+    queryKey: ["criteria-guide-display"],
+    queryFn: async () => {
+      const uid = localStorage.getItem("selectedUserId");
+      const h: Record<string, string> = { "Content-Type": "application/json" };
+      if (uid) h["X-User-Id"] = uid;
+      const r = await fetch("/api/settings/criteria-guide", { headers: h });
+      if (!r.ok) return { sections: [] };
+      return r.json();
+    },
+    enabled: open,
+  });
+
+  const savedSections = guideData?.sections ?? [];
+  const hasSaved = savedSections.length > 0;
+
+  // Fallback: hardcoded content
   const SCALE_ROWS = getScaleRows(t);
   const BEHAVIORAL_ROWS = getCompRows(t, "behavioral");
   const LEADERSHIP_ROWS = getCompRows(t, "leadership");
@@ -316,13 +335,12 @@ export function CriteriaGuideDialog({ open, onClose }: { open: boolean; onClose:
   const FINAL_TABLE_ROWS = getFinalTable(t);
   const ALERT_ROWS = getAlerts(t);
 
-  const sectionKeys = ["scale", "behavioral", "leadership", "technical", "alerts", "final", "formula"] as const;
-  const [collapsed, setCollapsed] = useState<Record<string, boolean>>(
-    Object.fromEntries(sectionKeys.map((k) => [k, true]))
-  );
+  const fallbackKeys = ["scale", "behavioral", "leadership", "technical", "alerts", "final", "formula"] as const;
+  const sectionKeys: string[] = hasSaved ? savedSections.map((_: { title: string; content: string }, i: number) => `s${i}`) : [...fallbackKeys];
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const toggle = (key: string) => setCollapsed((c) => ({ ...c, [key]: !c[key] }));
-  const expandAll = () => setCollapsed(Object.fromEntries(sectionKeys.map((k) => [k, false])));
-  const collapseAll = () => setCollapsed(Object.fromEntries(sectionKeys.map((k) => [k, true])));
+  const expandAll = () => setCollapsed(Object.fromEntries(sectionKeys.map((k: string) => [k, false])));
+  const collapseAll = () => setCollapsed(Object.fromEntries(sectionKeys.map((k: string) => [k, true])));
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
@@ -336,17 +354,6 @@ export function CriteriaGuideDialog({ open, onClose }: { open: boolean; onClose:
 
         <div className="overflow-y-auto flex-1 min-h-0 pl-4 space-y-4 mt-4">
 
-          {/* كيفية الاستخدام */}
-          <div className="rounded-lg border border-blue-200 bg-blue-50 dark:bg-blue-950 dark:border-blue-800 p-4">
-            <div className="flex items-start gap-2">
-              <Info className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
-              <div className="text-sm">
-                <strong>{t("evaluations.criteria.howToUse")}</strong> {t("evaluations.criteria.howToUseDesc")}
-              </div>
-            </div>
-          </div>
-
-          {/* فرد / طي الكل */}
           <div className="flex gap-2 justify-end">
             <Button variant="outline" size="sm" onClick={expandAll} className="gap-1.5 text-xs">
               <ChevronsUpDown className="size-3.5" />
@@ -358,159 +365,161 @@ export function CriteriaGuideDialog({ open, onClose }: { open: boolean; onClose:
             </Button>
           </div>
 
-          {/* مقياس التقييم — ملخص سريع */}
-          <div className="rounded-lg border">
-            <button type="button" onClick={() => toggle("scale")} className="flex w-full items-center justify-between p-3 hover:bg-muted/50 transition-colors rounded-lg">
-              <h3 className="text-lg font-bold">{t("evaluations.criteria.scaleSummary")}</h3>
-              {collapsed["scale"] ? <ChevronDown className="size-4 text-muted-foreground" /> : <ChevronUp className="size-4 text-muted-foreground" />}
-            </button>
-            {!collapsed["scale"] && (
-              <div className="px-3 pb-3">
-                <div className="rounded-md border overflow-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="text-right w-20">{t("evaluations.criteria.scaleGrade")}</TableHead>
-                        <TableHead className="text-right w-36">{t("evaluations.criteria.scaleMeaning")}</TableHead>
-                        <TableHead className="text-right w-28">{t("evaluations.criteria.scalePercent")}</TableHead>
-                        <TableHead className="text-right">{t("evaluations.criteria.scaleSemantic")}</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {SCALE_ROWS.map((r) => (
-                        <TableRow key={r.level}>
-                          <TableCell>
-                            <span className={`inline-flex items-center justify-center w-8 h-8 rounded-full text-white font-bold ${r.color}`}>
-                              {r.level}
-                            </span>
-                          </TableCell>
-                          <TableCell className="font-semibold text-sm">{r.label}</TableCell>
-                          <TableCell className="text-sm font-mono">{r.range}</TableCell>
-                          <TableCell className="text-xs text-muted-foreground">{r.desc}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+          {hasSaved ? (
+            /* ===== Dynamic sections from settings ===== */
+            savedSections.map((sec: { title: string; content: string }, i: number) => {
+              const key = `s${i}`;
+              return (
+                <div key={i} className="rounded-lg border">
+                  <button type="button" onClick={() => toggle(key)} className="flex w-full items-center justify-between p-3 hover:bg-muted/50 transition-colors rounded-lg">
+                    <h3 className="text-lg font-bold">{sec.title}</h3>
+                    {collapsed[key] ? <ChevronDown className="size-4 text-muted-foreground" /> : <ChevronUp className="size-4 text-muted-foreground" />}
+                  </button>
+                  {!collapsed[key] && (
+                    <div className="px-3 pb-3 prose prose-sm max-w-none dark:prose-invert text-right" dir="rtl"
+                      dangerouslySetInnerHTML={{ __html: sec.content }} />
+                  )}
+                </div>
+              );
+            })
+          ) : (
+            /* ===== Fallback: hardcoded content ===== */
+            <>
+              <div className="rounded-lg border border-blue-200 bg-blue-50 dark:bg-blue-950 dark:border-blue-800 p-4">
+                <div className="flex items-start gap-2">
+                  <Info className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
+                  <div className="text-sm">
+                    <strong>{t("evaluations.criteria.howToUse")}</strong> {t("evaluations.criteria.howToUseDesc")}
+                  </div>
                 </div>
               </div>
-            )}
-          </div>
 
-          {/* القسم الأول: الجدارات السلوكية */}
-          <div className="rounded-lg border">
-            <button type="button" onClick={() => toggle("behavioral")} className="flex w-full items-center justify-between p-3 hover:bg-muted/50 transition-colors rounded-lg">
-              <h3 className="text-lg font-bold">{t("evaluations.criteria.behavioralSection")}</h3>
-              {collapsed["behavioral"] ? <ChevronDown className="size-4 text-muted-foreground" /> : <ChevronUp className="size-4 text-muted-foreground" />}
-            </button>
-            {!collapsed["behavioral"] && (
-              <div className="px-3 pb-3">
-                <CompetencyTable rows={BEHAVIORAL_ROWS} t={t} />
-              </div>
-            )}
-          </div>
-
-          {/* القسم الثاني: الجدارات القيادية */}
-          <div className="rounded-lg border">
-            <button type="button" onClick={() => toggle("leadership")} className="flex w-full items-center justify-between p-3 hover:bg-muted/50 transition-colors rounded-lg">
-              <h3 className="text-lg font-bold">{t("evaluations.criteria.leadershipSection")}</h3>
-              {collapsed["leadership"] ? <ChevronDown className="size-4 text-muted-foreground" /> : <ChevronUp className="size-4 text-muted-foreground" />}
-            </button>
-            {!collapsed["leadership"] && (
-              <div className="px-3 pb-3">
-                <CompetencyTable rows={LEADERSHIP_ROWS} t={t} />
-              </div>
-            )}
-          </div>
-
-          {/* القسم الثالث: الجدارات الفنية المشتركة */}
-          <div className="rounded-lg border">
-            <button type="button" onClick={() => toggle("technical")} className="flex w-full items-center justify-between p-3 hover:bg-muted/50 transition-colors rounded-lg">
-              <h3 className="text-lg font-bold">{t("evaluations.criteria.technicalSection")}</h3>
-              {collapsed["technical"] ? <ChevronDown className="size-4 text-muted-foreground" /> : <ChevronUp className="size-4 text-muted-foreground" />}
-            </button>
-            {!collapsed["technical"] && (
-              <div className="px-3 pb-3">
-                <CompetencyTable rows={TECHNICAL_ROWS} t={t} />
-              </div>
-            )}
-          </div>
-
-          {/* تنبيهات جوهرية للمقيّم */}
-          <div className="rounded-lg border">
-            <button type="button" onClick={() => toggle("alerts")} className="flex w-full items-center justify-between p-3 hover:bg-muted/50 transition-colors rounded-lg">
-              <h3 className="text-lg font-bold flex items-center gap-2">
-                {t("evaluations.criteria.alertsTitle")}
-                <AlertTriangle className="w-5 h-5 text-yellow-600" />
-              </h3>
-              {collapsed["alerts"] ? <ChevronDown className="size-4 text-muted-foreground" /> : <ChevronUp className="size-4 text-muted-foreground" />}
-            </button>
-            {!collapsed["alerts"] && (
-              <div className="px-3 pb-3">
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {ALERT_ROWS.map((a) => (
-                    <div key={a.key} className={`rounded-lg border-r-4 p-3 ${a.color}`}>
-                      <div className="font-semibold text-sm mb-1">{a.title}</div>
-                      <div className="text-xs text-muted-foreground">{a.desc}</div>
+              <div className="rounded-lg border">
+                <button type="button" onClick={() => toggle("scale")} className="flex w-full items-center justify-between p-3 hover:bg-muted/50 transition-colors rounded-lg">
+                  <h3 className="text-lg font-bold">{t("evaluations.criteria.scaleSummary")}</h3>
+                  {collapsed["scale"] ? <ChevronDown className="size-4 text-muted-foreground" /> : <ChevronUp className="size-4 text-muted-foreground" />}
+                </button>
+                {!collapsed["scale"] && (
+                  <div className="px-3 pb-3">
+                    <div className="rounded-md border overflow-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="text-right w-20">{t("evaluations.criteria.scaleGrade")}</TableHead>
+                            <TableHead className="text-right w-36">{t("evaluations.criteria.scaleMeaning")}</TableHead>
+                            <TableHead className="text-right w-28">{t("evaluations.criteria.scalePercent")}</TableHead>
+                            <TableHead className="text-right">{t("evaluations.criteria.scaleSemantic")}</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {SCALE_ROWS.map((r) => (
+                            <TableRow key={r.level}>
+                              <TableCell>
+                                <span className={`inline-flex items-center justify-center w-8 h-8 rounded-full text-white font-bold ${r.color}`}>
+                                  {r.level}
+                                </span>
+                              </TableCell>
+                              <TableCell className="font-semibold text-sm">{r.label}</TableCell>
+                              <TableCell className="text-sm font-mono">{r.range}</TableCell>
+                              <TableCell className="text-xs text-muted-foreground">{r.desc}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
                     </div>
-                  ))}
-                </div>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
 
-          {/* جدول التقدير النهائي */}
-          <div className="rounded-lg border">
-            <button type="button" onClick={() => toggle("final")} className="flex w-full items-center justify-between p-3 hover:bg-muted/50 transition-colors rounded-lg">
-              <h3 className="text-lg font-bold">{t("evaluations.criteria.finalTableTitle")}</h3>
-              {collapsed["final"] ? <ChevronDown className="size-4 text-muted-foreground" /> : <ChevronUp className="size-4 text-muted-foreground" />}
-            </button>
-            {!collapsed["final"] && (
-              <div className="px-3 pb-3">
-                <div className="rounded-md border overflow-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="text-right w-28">{t("evaluations.criteria.finalPercent")}</TableHead>
-                        <TableHead className="text-right w-36">{t("evaluations.criteria.finalRating")}</TableHead>
-                        <TableHead className="text-right">{t("evaluations.criteria.finalDesc")}</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {FINAL_TABLE_ROWS.map((r) => (
-                        <TableRow key={r.range}>
-                          <TableCell className="font-mono text-sm font-semibold">{r.range}</TableCell>
-                          <TableCell>
-                            <Badge className={`${r.color} text-white border-0`}>{r.label}</Badge>
-                          </TableCell>
-                          <TableCell className="text-xs text-muted-foreground">{r.desc}</TableCell>
-                        </TableRow>
+              {[
+                { key: "behavioral", title: t("evaluations.criteria.behavioralSection"), rows: BEHAVIORAL_ROWS },
+                { key: "leadership", title: t("evaluations.criteria.leadershipSection"), rows: LEADERSHIP_ROWS },
+                { key: "technical", title: t("evaluations.criteria.technicalSection"), rows: TECHNICAL_ROWS },
+              ].map(({ key, title, rows }) => (
+                <div key={key} className="rounded-lg border">
+                  <button type="button" onClick={() => toggle(key)} className="flex w-full items-center justify-between p-3 hover:bg-muted/50 transition-colors rounded-lg">
+                    <h3 className="text-lg font-bold">{title}</h3>
+                    {collapsed[key] ? <ChevronDown className="size-4 text-muted-foreground" /> : <ChevronUp className="size-4 text-muted-foreground" />}
+                  </button>
+                  {!collapsed[key] && (
+                    <div className="px-3 pb-3">
+                      <CompetencyTable rows={rows} t={t} />
+                    </div>
+                  )}
+                </div>
+              ))}
+
+              <div className="rounded-lg border">
+                <button type="button" onClick={() => toggle("alerts")} className="flex w-full items-center justify-between p-3 hover:bg-muted/50 transition-colors rounded-lg">
+                  <h3 className="text-lg font-bold flex items-center gap-2">
+                    {t("evaluations.criteria.alertsTitle")}
+                    <AlertTriangle className="w-5 h-5 text-yellow-600" />
+                  </h3>
+                  {collapsed["alerts"] ? <ChevronDown className="size-4 text-muted-foreground" /> : <ChevronUp className="size-4 text-muted-foreground" />}
+                </button>
+                {!collapsed["alerts"] && (
+                  <div className="px-3 pb-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                      {ALERT_ROWS.map((a) => (
+                        <div key={a.key} className={`rounded-lg border-r-4 p-3 ${a.color}`}>
+                          <div className="font-semibold text-sm mb-1">{a.title}</div>
+                          <div className="text-xs text-muted-foreground">{a.desc}</div>
+                        </div>
                       ))}
-                    </TableBody>
-                  </Table>
-                </div>
+                    </div>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
 
-          {/* معادلة الدرجة الإجمالية */}
-          <div className="rounded-lg border">
-            <button type="button" onClick={() => toggle("formula")} className="flex w-full items-center justify-between p-3 hover:bg-muted/50 transition-colors rounded-lg">
-              <h3 className="text-lg font-bold">{t("evaluations.criteria.formulaTitle")}</h3>
-              {collapsed["formula"] ? <ChevronDown className="size-4 text-muted-foreground" /> : <ChevronUp className="size-4 text-muted-foreground" />}
-            </button>
-            {!collapsed["formula"] && (
-              <div className="px-3 pb-3">
-                <div className="rounded-lg border border-primary/30 bg-primary/5 p-4 text-center">
-                  <p className="text-sm font-mono">
-                    {t("evaluations.criteria.formula")}
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {t("evaluations.criteria.formulaNote")}
-                  </p>
-                </div>
+              <div className="rounded-lg border">
+                <button type="button" onClick={() => toggle("final")} className="flex w-full items-center justify-between p-3 hover:bg-muted/50 transition-colors rounded-lg">
+                  <h3 className="text-lg font-bold">{t("evaluations.criteria.finalTableTitle")}</h3>
+                  {collapsed["final"] ? <ChevronDown className="size-4 text-muted-foreground" /> : <ChevronUp className="size-4 text-muted-foreground" />}
+                </button>
+                {!collapsed["final"] && (
+                  <div className="px-3 pb-3">
+                    <div className="rounded-md border overflow-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="text-right w-28">{t("evaluations.criteria.finalPercent")}</TableHead>
+                            <TableHead className="text-right w-36">{t("evaluations.criteria.finalRating")}</TableHead>
+                            <TableHead className="text-right">{t("evaluations.criteria.finalDesc")}</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {FINAL_TABLE_ROWS.map((r) => (
+                            <TableRow key={r.range}>
+                              <TableCell className="font-mono text-sm font-semibold">{r.range}</TableCell>
+                              <TableCell>
+                                <Badge className={`${r.color} text-white border-0`}>{r.label}</Badge>
+                              </TableCell>
+                              <TableCell className="text-xs text-muted-foreground">{r.desc}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
+
+              <div className="rounded-lg border">
+                <button type="button" onClick={() => toggle("formula")} className="flex w-full items-center justify-between p-3 hover:bg-muted/50 transition-colors rounded-lg">
+                  <h3 className="text-lg font-bold">{t("evaluations.criteria.formulaTitle")}</h3>
+                  {collapsed["formula"] ? <ChevronDown className="size-4 text-muted-foreground" /> : <ChevronUp className="size-4 text-muted-foreground" />}
+                </button>
+                {!collapsed["formula"] && (
+                  <div className="px-3 pb-3">
+                    <div className="rounded-lg border border-primary/30 bg-primary/5 p-4 text-center">
+                      <p className="text-sm font-mono">{t("evaluations.criteria.formula")}</p>
+                      <p className="text-xs text-muted-foreground mt-1">{t("evaluations.criteria.formulaNote")}</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
 
         </div>
       </DialogContent>

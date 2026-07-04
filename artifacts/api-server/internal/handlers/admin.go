@@ -264,6 +264,50 @@ func (h *Handler) SaveEvaluationSettings(w http.ResponseWriter, r *http.Request)
 	httpx.JSON(w, http.StatusOK, s)
 }
 
+// ---------- Criteria Guide ----------
+
+const criteriaGuideKey = "criteria_guide"
+
+type CriteriaGuideSection struct {
+	Title   string `json:"title"`
+	Content string `json:"content"` // HTML content
+}
+
+type CriteriaGuideConfig struct {
+	Sections []CriteriaGuideSection `json:"sections"`
+}
+
+// GetCriteriaGuide handles GET /api/settings/criteria-guide.
+func (h *Handler) GetCriteriaGuide(w http.ResponseWriter, r *http.Request) {
+	val, err := h.Store.GetSetting(r.Context(), criteriaGuideKey)
+	if err != nil {
+		httpx.JSON(w, http.StatusOK, CriteriaGuideConfig{Sections: []CriteriaGuideSection{}})
+		return
+	}
+	var cfg CriteriaGuideConfig
+	if err := json.Unmarshal(val, &cfg); err != nil {
+		httpx.JSON(w, http.StatusOK, CriteriaGuideConfig{Sections: []CriteriaGuideSection{}})
+		return
+	}
+	httpx.JSON(w, http.StatusOK, cfg)
+}
+
+// SaveCriteriaGuide handles PUT /api/settings/criteria-guide.
+func (h *Handler) SaveCriteriaGuide(w http.ResponseWriter, r *http.Request) {
+	var cfg CriteriaGuideConfig
+	if err := httpx.Decode(r, &cfg); err != nil {
+		httpx.WriteErr(w, err)
+		return
+	}
+	val, _ := json.Marshal(cfg)
+	if err := h.Store.SaveSetting(r.Context(), criteriaGuideKey, val); err != nil {
+		httpx.WriteErr(w, err)
+		return
+	}
+	h.audit(r, "settings.criteria_guide.update", "Settings", nil)
+	httpx.JSON(w, http.StatusOK, cfg)
+}
+
 // ---------- Field Options ----------
 
 const fieldOptionsKey = "field_options"

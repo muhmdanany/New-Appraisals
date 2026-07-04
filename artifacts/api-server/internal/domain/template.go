@@ -30,5 +30,6 @@ type EvalTemplateItem struct {
 	GroupID   string  `json:"groupId"`
 	Label     string  `json:"label"`
 	HelpText  *string `json:"helpText"`
+	Weight    int     `json:"weight"`
 	SortOrder int     `json:"sortOrder"`
 }
